@@ -89,4 +89,7 @@ jobs:
         run: brew install swiftformat
 
       - name: Lint
-        run: swiftformat Sources Tests --lint
+        # Only lint Sources. Tests intentionally use patterns (force
+        # unwraps in XCTest helpers, deliberate import ordering to put
+        # @testable imports last) that conflict with SwiftFormat defaults.
+        run: swiftformat Sources --lint
