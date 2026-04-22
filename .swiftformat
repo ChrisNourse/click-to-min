@@ -1,0 +1,14 @@
+# ClickToMin swiftformat config (T-0.3 / T-5.3)
+# Minimal, opinionated. Keep rules tight so CI lint drift is surface-level only.
+
+--swiftversion 5.9
+--indent 4
+--maxwidth 120
+--commas inline
+--trimwhitespace always
+--semicolons never
+--self remove
+--stripunusedargs closure-only
+
+# Disable rules that churn without value:
+--disable redundantSelf
