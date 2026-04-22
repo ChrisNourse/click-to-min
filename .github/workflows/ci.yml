@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    # Runner pin: macos-14 (Sonoma, arm64). Do not use macos-latest — toolchain
+    # drift silently breaks builds. Re-pin deliberately when upgrading.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: "spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}"
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      # pinned 2026-04-22, Xcode versions on this runner: 15.2, 15.3, 15.4 (source: https://github.com/actions/runner-images)
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build (debug)
+        run: swift build -c debug
+
+      - name: Test
+        run: swift test --parallel
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: .build/**/TestResults
+
+  bundle-check:
+    needs: build-test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: "spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}"
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      # pinned 2026-04-22, Xcode versions on this runner: 15.2, 15.3, 15.4 (source: https://github.com/actions/runner-images)
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Assemble .app bundle
+        run: ./build.sh
+
+      - name: Verify codesign
+        run: codesign --verify --verbose ClickToMin.app
+
+      - name: Lint Info.plist
+        run: plutil -lint Resources/Info.plist
+
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClickToMin.app
+          path: ClickToMin.app
+          retention-days: 7
+
+  lint:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install swiftformat
+        run: brew install swiftformat
+
+      - name: Lint
+        run: swiftformat --lint Sources Tests
