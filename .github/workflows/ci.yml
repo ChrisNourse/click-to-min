@@ -89,4 +89,4 @@ jobs:
         run: brew install swiftformat
 
       - name: Lint
-        run: swiftformat --lint Sources Tests
+          run: swiftformat Sources Tests --lint
