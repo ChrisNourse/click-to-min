@@ -46,7 +46,11 @@ final class AXHitTester: HitTesting {
 
     /// Extracts the owning process PID from an AX element.
     func pid(_ element: AnyObject) -> pid_t? {
-        guard let axElement = element as? AXUIElement else { return nil }
+        // HitTesting contract: `element` is always an AXUIElement returned
+        // from `hitTest(at:)`. AXUIElement is a CF type that round-trips
+        // through AnyObject; force-cast is safe and sidesteps the
+        // "conditional downcast always succeeds" warning-as-error.
+        let axElement = element as! AXUIElement
         var pid: pid_t = 0
         guard AXUIElementGetPid(axElement, &pid) == .success else { return nil }
         return pid
@@ -64,7 +68,7 @@ final class AXHitTester: HitTesting {
     /// for apps in the "Recent Applications" Dock section. Best-effort
     /// only — returns nil and lets the pipeline fail gracefully.
     func dockItemURL(_ element: AnyObject) -> URL? {
-        guard let axElement = element as? AXUIElement else { return nil }
+        let axElement = element as! AXUIElement
         guard let dockItem = walkToDockItem(from: axElement) else { return nil }
 
         // Filter out non-actionable subroles.

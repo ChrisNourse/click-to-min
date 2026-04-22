@@ -15,7 +15,7 @@ import os.log
 /// widened to a screen-edge strip along the Dock's configured edge so
 /// the short-circuit still triggers while the Dock is revealed.
 /// Fallback chain if 5pt proves too narrow: 5pt → 10pt → full-edge strip.
-final class AXDockFrameProvider: DockFrameProvider {
+final class AXDockFrameProvider: NSObject, DockFrameProvider {
 
     // MARK: - Dependencies
 
@@ -29,7 +29,8 @@ final class AXDockFrameProvider: DockFrameProvider {
 
     private var screenObserver: NSObjectProtocol?
     private var launchObserver: NSObjectProtocol?
-    private var prefObserver: NSObjectProtocol?
+    // prefObserver uses target/selector (not block), so we don't store a
+    // token — removeObserver(self) handles it in deinit.
 
     // MARK: - Init / Deinit
 
@@ -37,6 +38,7 @@ final class AXDockFrameProvider: DockFrameProvider {
     ///   Phase 3 wires this to `DockPIDCache.pid`.
     init(dockPIDProvider: @escaping () -> pid_t?) {
         self.dockPID = dockPIDProvider
+        super.init()
         refreshFrame()
 
         screenObserver = NotificationCenter.default.addObserver(
@@ -57,23 +59,32 @@ final class AXDockFrameProvider: DockFrameProvider {
             self?.refreshFrame()
         }
 
-        prefObserver = DistributedNotificationCenter.default().addObserver(
-            forName: .init("com.apple.dock.prefchanged"),
+        // DistributedNotificationCenter.addObserver(forName:object:queue:using:)
+        // does not accept a suspension-behavior argument; use the
+        // target/selector overload for that. Since prefchanged is rare and
+        // we want immediate delivery, we use the selector form and post
+        // a DispatchQueue.main.async inside the selector.
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleDockPrefChanged(_:)),
+            name: .init("com.apple.dock.prefchanged"),
             object: nil,
             suspensionBehavior: .deliverImmediately
-        ) { [weak self] _ in
-            // Dock prefs changed (resize, move, auto-hide toggle).
-            // Dispatch to main to keep AX calls on the main thread.
-            DispatchQueue.main.async {
-                self?.refreshFrame()
-            }
+        )
+    }
+
+    @objc private func handleDockPrefChanged(_ note: Notification) {
+        // Dock prefs changed (resize, move, auto-hide toggle).
+        // Dispatch to main to keep AX calls on the main thread.
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshFrame()
         }
     }
 
     deinit {
         if let t = screenObserver { NotificationCenter.default.removeObserver(t) }
         if let t = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(t) }
-        if let t = prefObserver { DistributedNotificationCenter.default().removeObserver(t) }
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     // MARK: - DockFrameProvider conformance
@@ -107,7 +118,7 @@ final class AXDockFrameProvider: DockFrameProvider {
 
         os_log("dock frame refreshed: %{public}@",
                log: Log.lifecycle, type: .info,
-               cachedFrame.map { NSStringFromRect(NSRect($0)) } ?? "nil")
+               cachedFrame.map { NSStringFromRect($0) } ?? "nil")
     }
 
     /// Finds the Dock's AXList element and returns its frame, or falls
