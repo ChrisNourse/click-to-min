@@ -111,7 +111,7 @@ GlobalClickMonitor  (CGEventTap, session-wide)
    └─ WindowMinimizer       set AXMinimized = true on the key window
 ```
 
-**100% Core coverage**, zero live AX calls required.
+Zero live AX calls required.
 
 ## Development
 
