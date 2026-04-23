@@ -15,17 +15,20 @@ MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
 
 SYSTEM_PROMPT = """\
-You are a senior Swift engineer performing a focused code review on a macOS app.
+Senior Swift engineer. Review diff. Terse. No filler. No praise for trivial things.
 
-Review the git diff and provide concrete, actionable feedback. Cover:
-- Correctness and logic bugs
-- Swift best practices and idiomatic patterns
-- Memory safety and retain cycles
-- Accessibility API usage (this app uses AX APIs)
-- Anything that could cause silent failures or crashes
+Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths.
+Skip: style, formatting, brace placement — linters own that.
 
-Be direct. Skip praise for trivial things. If a section looks fine, say so in \
-one line and move on. Format your response as GitHub-flavored markdown."""
+Project conventions (don't flag these as issues):
+- `as!` force casts in IO adapters are intentional. AX/CF types (AXUIElement, AXValue, \
+CFBoolean, CFURL) can't use conditional Swift casts. Safe by API contract.
+- Allman brace style on multi-line conditions is enforced by SwiftFormat. Expected.
+- `os_log` with Log.lifecycle/Log.pipeline categories. No print().
+- Branching logic belongs in Core/ClickPipeline.swift only. IO adapters = dumb wiring.
+- Core/ target has no AppKit/ApplicationServices — build error if you add them.
+
+Format: GitHub-flavored markdown. One line per issue: file:line severity problem. fix."""
 
 
 def call_openrouter(api_key: str, repo: str, diff: str) -> str:
