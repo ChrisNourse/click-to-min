@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 /// Converts NSEvent coordinates (bottom-left origin per screen) to
 /// Accessibility coordinates (top-left origin, global coordinate space).

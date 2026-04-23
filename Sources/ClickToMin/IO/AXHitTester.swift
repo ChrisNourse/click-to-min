@@ -10,7 +10,6 @@ import os.log
 /// imports ApplicationServices. Since `AXUIElement` is a CF type
 /// that bridges to `AnyObject`, the cast round-trips cleanly.
 final class AXHitTester: HitTesting {
-
     /// Reused system-wide element — no per-click allocation.
     let systemWide: AXUIElement = AXUIElementCreateSystemWide()
 
@@ -73,12 +72,12 @@ final class AXHitTester: HitTesting {
 
         // Filter out non-actionable subroles.
         if let subrole = axStringAttribute(dockItem, kAXSubroleAttribute as CFString) {
-            let excluded: Set<String> = [
+            let excluded: Set = [
                 "AXSeparatorDockItem",
                 "AXFolderDockItem",
                 "AXTrashDockItem",
                 "AXMinimizedWindowDockItem",
-                "AXDesktopDockItem",
+                "AXDesktopDockItem"
             ]
             if excluded.contains(subrole) {
                 return nil
@@ -87,7 +86,8 @@ final class AXHitTester: HitTesting {
 
         // Primary: kAXURLAttribute
         if let urlString = axStringAttribute(dockItem, kAXURLAttribute as CFString),
-           let url = URL(string: urlString) {
+           let url = URL(string: urlString)
+        {
             return url
         }
 
@@ -113,7 +113,7 @@ final class AXHitTester: HitTesting {
 
         // Walk up. Limit iterations to avoid infinite loops on malformed
         // hierarchies.
-        for _ in 0..<20 {
+        for _ in 0 ..< 20 {
             var parentRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(
                 current, kAXParentAttribute as CFString, &parentRef

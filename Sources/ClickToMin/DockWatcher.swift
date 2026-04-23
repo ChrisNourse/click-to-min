@@ -12,7 +12,6 @@ import os.log
 /// No branching logic of its own — the pipeline is the only thing here.
 /// `start()` / `stop()` let `AppDelegate` re-grant / revoke cleanly.
 final class DockWatcher {
-
     // MARK: - I/O adapters (strong refs kept alive for app lifetime)
 
     private let clickMonitor = GlobalClickMonitor()
@@ -62,7 +61,7 @@ final class DockWatcher {
     func start() {
         clickMonitor.start { [weak self] point in
             dispatchPrecondition(condition: .onQueue(.main))
-            guard let self = self else { return }
+            guard let self else { return }
             runClickPipeline(nsEventPoint: point, deps: self.deps)
         }
         os_log("DockWatcher started", log: Log.lifecycle, type: .info)

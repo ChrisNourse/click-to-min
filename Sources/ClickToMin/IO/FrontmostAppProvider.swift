@@ -15,7 +15,6 @@ public protocol FrontmostAppProviding {
 /// on every access. No caching; the coordinator reads at click-dispatch
 /// time per PLAN.md §Coordinator.
 public struct FrontmostAppProvider: FrontmostAppProviding {
-
     public init() {}
 
     public var frontmost: NSRunningApplication? {
@@ -28,7 +27,6 @@ public struct FrontmostAppProvider: FrontmostAppProviding {
 /// Bridges `FrontmostAppProvider` to the pure `FrontmostAppInfoProviding`
 /// protocol from ClickToMinCore (which can't reference NSRunningApplication).
 extension FrontmostAppProvider: FrontmostAppInfoProviding {
-
     public var frontmostPidAndURL: (pid: pid_t, bundleURL: URL?)? {
         guard let app = frontmost else { return nil }
         return (app.processIdentifier, app.bundleURL)

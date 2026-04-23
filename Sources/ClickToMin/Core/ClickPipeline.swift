@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 /// Dependencies for a single click-pipeline invocation.
 ///

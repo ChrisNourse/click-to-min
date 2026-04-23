@@ -16,7 +16,6 @@ import os.log
 /// the short-circuit still triggers while the Dock is revealed.
 /// Fallback chain if 5pt proves too narrow: 5pt → 10pt → full-edge strip.
 final class AXDockFrameProvider: NSObject, DockFrameProvider {
-
     // MARK: - Dependencies
 
     private let dockPID: () -> pid_t?
@@ -127,14 +126,16 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
         // Walk the Dock app's children to find the AXList.
         var childrenRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(dockApp, kAXChildrenAttribute as CFString, &childrenRef) == .success,
-              let children = childrenRef as? [AXUIElement] else {
+              let children = childrenRef as? [AXUIElement]
+        else {
             return nil
         }
 
         for child in children {
             var roleRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef) == .success,
-                  let role = roleRef as? String, role == "AXList" else {
+                  let role = roleRef as? String, role == "AXList"
+            else {
                 continue
             }
 
@@ -146,7 +147,8 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
             // Fallback: union of child item frames.
             var itemChildrenRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &itemChildrenRef) == .success,
-                  let items = itemChildrenRef as? [AXUIElement] else {
+                  let items = itemChildrenRef as? [AXUIElement]
+            else {
                 continue
             }
 
@@ -166,13 +168,15 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
         var posRef: CFTypeRef?
         var sizeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posRef) == .success,
-              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success else {
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success
+        else {
             return nil
         }
         var point = CGPoint.zero
         var size = CGSize.zero
         guard AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
-              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else {
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+        else {
             return nil
         }
         return CGRect(origin: point, size: size)

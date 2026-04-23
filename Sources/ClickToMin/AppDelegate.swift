@@ -5,7 +5,6 @@ import os.log
 
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
-
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -118,10 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText = """
-            ClickToMin needs Accessibility permission to detect Dock clicks \
-            and minimize windows. Please grant access in System Settings, \
-            then the app will activate automatically.
-            """
+        ClickToMin needs Accessibility permission to detect Dock clicks \
+        and minimize windows. Please grant access in System Settings, \
+        then the app will activate automatically.
+        """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()

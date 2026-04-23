@@ -1,5 +1,5 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 /// Abstracts the live Dock frame so `DockGeometry` stays pure and testable.
 /// Implemented by `AXDockFrameProvider` in the I/O layer.
