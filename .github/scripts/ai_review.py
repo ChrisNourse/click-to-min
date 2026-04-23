@@ -39,21 +39,25 @@ short-circuits left-to-right; `os.path.exists()` before `os.path.getsize()` is c
 - Fewer high-confidence comments are better than many speculative ones.
 - Do NOT invent problems. If the code is correct, return LGTM.
 
-Return a JSON object with two fields:
+Return a JSON object with three fields:
 - "summary": one-sentence overall assessment
-- "comments": array of objects, each with:
+- "comments": array of objects for NEW inline comments, each with:
   - "path": file path exactly as shown in diff header (after "b/")
   - "line": line number in NEW file (right side of diff, from + in @@ headers)
   - "body": one-line description: severity, problem, fix
   - "suggestion": (optional) exact replacement code for that line — only when you \
 have a concrete fix that DIFFERS from the existing code
+- "thread_replies": array of objects responding to replies on your previous comments, each with:
+  - "thread_id": the thread_id from the previous review context
+  - "body": your response — acknowledge if resolved, counter-argue if not, or concede if \
+the author's argument is valid. Keep it brief.
 
-Line number rules:
+Line number rules (for "comments" only):
 - Use line numbers from the new file (number after + in @@ hunk headers)
 - Only comment on lines present in the diff as additions (+) or context lines
 - Never comment on deleted lines (-)
 
-If no issues found, return {"summary": "LGTM", "comments": []}.
+If no issues found, return {"summary": "LGTM", "comments": [], "thread_replies": []}.
 
 Return ONLY valid JSON. No markdown fences. No text outside the JSON."""
 
@@ -61,8 +65,9 @@ FOLLOWUP_ADDENDUM = """\
 
 This is a FOLLOW-UP review of incremental changes only. You are reviewing \
 ONLY the new commits, not the entire PR. Focus on:
-1. Whether previous suggestions (listed below) were addressed
-2. Any NEW issues introduced by these specific changes
+1. Respond to replies on your previous suggestions via "thread_replies" — \
+thumbs up if resolved, counter-argue if not, concede if author is right
+2. Any NEW issues introduced by these specific changes (via "comments")
 Do NOT raise issues about code that was not changed in this diff."""
 
 
@@ -135,9 +140,11 @@ def get_previous_review_threads(repo: str, pr_number: str) -> list[dict]:
         pullRequest(number: $pr) {
           reviewThreads(first: 100) {
             nodes {
+              id
               isResolved
               comments(first: 10) {
                 nodes {
+                  databaseId
                   body
                   path
                   line
@@ -180,11 +187,16 @@ def get_previous_review_threads(repo: str, pr_number: str) -> list[dict]:
         if author not in ("github-actions[bot]", "github-actions"):
             continue
         threads.append({
+            "thread_id": node["id"],
+            "first_comment_db_id": first.get("databaseId"),
             "isResolved": node["isResolved"],
             "path": first.get("path"),
             "line": first.get("line"),
             "body": first.get("body", ""),
-            "replies": [c.get("body", "") for c in comments[1:]],
+            "replies": [
+                {"author": c.get("author", {}).get("login", ""), "body": c.get("body", "")}
+                for c in comments[1:]
+            ],
         })
     return threads
 
@@ -204,6 +216,37 @@ def delete_previous_issue_comments(repo: str, pr_number: str) -> None:
             ["gh", "api", "-X", "DELETE", f"repos/{repo}/issues/comments/{comment_id}"],
             capture_output=True,
         )
+
+
+def post_thread_replies(repo: str, pr_number: str,
+                        thread_replies: list[dict], threads: list[dict]) -> None:
+    """Reply to existing review threads using the REST API."""
+    thread_map = {t["thread_id"]: t for t in threads}
+    posted = 0
+    for reply in thread_replies:
+        thread_id = reply.get("thread_id", "")
+        body = reply.get("body", "")
+        if not thread_id or not body or thread_id not in thread_map:
+            continue
+        thread = thread_map[thread_id]
+        comment_id = thread.get("first_comment_db_id")
+        if not comment_id:
+            continue
+        result = subprocess.run(
+            [
+                "gh", "api", "-X", "POST",
+                f"repos/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
+                "-f", f"body={body}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            posted += 1
+        else:
+            print(f"  reply failed for thread {thread_id}: {result.stderr}")
+    if posted:
+        print(f"Posted {posted} thread reply/replies.")
 
 
 def create_review(repo: str, pr_number: str, summary: str,
@@ -321,26 +364,45 @@ def main() -> None:
     user_content = f"Review this {label}diff:\n\n```diff\n{diff}\n```"
 
     # Add previous review context for follow-ups
+    previous = []
     if is_followup:
         previous = get_previous_review_threads(repo, pr_number)
-        resolved = [t for t in previous if t["isResolved"]]
+        threads_with_replies = [t for t in previous if t["replies"]]
+        threads_without_replies = [t for t in previous if not t["replies"]]
         unresolved = [t for t in previous if not t["isResolved"]]
 
         if previous:
             user_content += "\n\n--- Previous review context ---\n"
-            if resolved:
-                user_content += f"\n{len(resolved)} previous suggestion(s) RESOLVED.\n"
-            if unresolved:
-                user_content += f"\n{len(unresolved)} previous suggestion(s) still UNRESOLVED:\n"
-                for thread in unresolved:
-                    replies = ""
-                    if thread["replies"]:
-                        replies = " | Author replied: " + " / ".join(thread["replies"][:3])
-                    user_content += f"- {thread['path']}:{thread['line']} — {thread['body']}{replies}\n"
+
+            if threads_with_replies:
                 user_content += (
-                    "\nFor unresolved items: if new diff fixes them, note as resolved in summary. "
-                    "If still broken, re-flag. If author disagreed, weigh their argument.\n"
+                    f"\n{len(threads_with_replies)} thread(s) have replies. "
+                    "Review each reply and respond via thread_replies:\n"
                 )
+                for thread in threads_with_replies:
+                    status = "RESOLVED" if thread["isResolved"] else "UNRESOLVED"
+                    user_content += f"\n[thread_id: {thread['thread_id']}] ({status})\n"
+                    user_content += f"  Your comment on {thread['path']}:{thread['line']}: {thread['body']}\n"
+                    for reply in thread["replies"]:
+                        user_content += f"  {reply['author']} replied: {reply['body']}\n"
+
+            resolved_no_reply = [t for t in threads_without_replies if t["isResolved"]]
+            unresolved_no_reply = [t for t in threads_without_replies if not t["isResolved"]]
+
+            if resolved_no_reply:
+                user_content += f"\n{len(resolved_no_reply)} suggestion(s) resolved without reply (no action needed).\n"
+            if unresolved_no_reply:
+                user_content += f"\n{len(unresolved_no_reply)} suggestion(s) still unresolved, no reply yet:\n"
+                for thread in unresolved_no_reply:
+                    user_content += f"- {thread['path']}:{thread['line']} — {thread['body']}\n"
+
+            user_content += (
+                "\nFor threads with replies: respond via thread_replies. "
+                "Thumbs up if fixed/agreed, counter-argue if still wrong, "
+                "concede if the author makes a valid point.\n"
+                "For unresolved items without replies: if new diff fixes them, skip. "
+                "If still broken, re-flag in comments.\n"
+            )
 
     print(f"Sending {len(diff):,} chars to {MODEL} ({'follow-up' if is_followup else 'initial'})...")
     raw = call_openrouter(api_key, repo, user_content, system)
@@ -366,6 +428,7 @@ def main() -> None:
 
     summary = review.get("summary", "No summary.")
     comments = review.get("comments", [])
+    thread_replies = review.get("thread_replies", [])
 
     # Clean up old v1 issue comments
     delete_previous_issue_comments(repo, pr_number)
@@ -373,6 +436,10 @@ def main() -> None:
     # Validate comment lines against diff and filter duplicate suggestions
     valid_lines, line_contents = parse_diff(diff)
     create_review(repo, pr_number, summary, comments, valid_lines, line_contents)
+
+    # Post replies to existing threads
+    if thread_replies and previous:
+        post_thread_replies(repo, pr_number, thread_replies, previous)
 
 
 if __name__ == "__main__":
