@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.chrisno.click-to-min</string>
+  <string>com.click-to-min</string>
 	<key>CFBundleName</key>
 	<string>ClickToMin</string>
 	<key>CFBundleExecutable</key>

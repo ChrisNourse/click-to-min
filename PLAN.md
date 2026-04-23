@@ -210,7 +210,7 @@ Each arrow is a single method call to a component. The pipeline itself is the on
 - `LSUIElement = YES`
 - `LSMinimumSystemVersion = 13.0` (matches `Package.swift` target)
 - `NSAccessibilityUsageDescription`
-- `CFBundleIdentifier = com.chrisno.click-to-min`
+- `CFBundleIdentifier = com.click-to-min`
 - `CFBundleName = ClickToMin`
 
 Note: `LSUIElement` only takes effect when launched from the `.app` bundle.
@@ -302,13 +302,13 @@ Since this starts as a one-person project, set **required approvals = 0** but ke
 
 ## Diagnostics / Logging
 
-Minimal `os_log` instrumentation for post-hoc support (user reports "it stopped working" with no reproducer). Subsystem: `com.chrisno.click-to-min`. Categories: `lifecycle`, `pipeline`.
+Minimal `os_log` instrumentation for post-hoc support (user reports "it stopped working" with no reproducer). Subsystem: `com.click-to-min`. Categories: `lifecycle`, `pipeline`.
 
 Signposts (all `.info` or lower, no PII):
 - `lifecycle`: permission granted, permission revoked, monitor installed, monitor torn down, Dock PID refreshed
 - `pipeline`: click short-circuited (outside Dock rect), click ignored (PID mismatch / URL mismatch / debounced), minimize dispatched (bundle ID only, not path)
 
-All disabled by default in release via `os_log`'s private/public annotations — user runs `log stream --predicate 'subsystem == "com.chrisno.click-to-min"'` to surface them when troubleshooting. Near-zero steady-state cost, no configuration surface (set-and-forget).
+All disabled by default in release via `os_log`'s private/public annotations — user runs `log stream --predicate 'subsystem == "com.click-to-min"'` to surface them when troubleshooting. Near-zero steady-state cost, no configuration surface (set-and-forget).
 
 ## Edge Cases Handled
 
@@ -399,7 +399,7 @@ Run before every release. Organized by category.
 - [ ] Grant Accessibility in System Settings → Privacy & Security → Accessibility
 - [ ] Quit via menu bar item exits cleanly, no lingering process
 - [ ] Re-measured memory & idle CPU, updated `PERF.md`, flagged any >20% regression (skip allowed with documented reason)
-- [ ] `log stream --predicate 'subsystem == "com.chrisno.click-to-min"'` shows expected lifecycle signposts on launch
+- [ ] `log stream --predicate 'subsystem == "com.click-to-min"'` shows expected lifecycle signposts on launch
 
 **Core Behavior**
 - [ ] Safari active, click Dock icon → key window minimizes
@@ -437,7 +437,7 @@ Run before every release. Organized by category.
 - [ ] Sleep/wake cycle → permission re-check fires, still works
 - [ ] Fresh install: launch app before granting permission, then grant → monitor starts producing events (validates post-grant install)
 - [ ] Rebuild with `./build.sh` → Accessibility permission persists (codesign identity stable)
-- [ ] `tccutil reset Accessibility com.chrisno.click-to-min` → next launch re-prompts cleanly (recovery path documented for users hitting stuck permission state)
+- [ ] `tccutil reset Accessibility com.click-to-min` → next launch re-prompts cleanly (recovery path documented for users hitting stuck permission state)
 
 **Dock Configuration**
 - [ ] Resize Dock via System Settings → short-circuit still works (frame refresh on `com.apple.dock.prefchanged`)

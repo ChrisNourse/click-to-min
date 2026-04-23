@@ -116,7 +116,7 @@ swift test --parallel
 ./build.sh
 
 # Live log stream
-log stream --predicate 'subsystem == "com.chrisno.click-to-min"'
+log stream --predicate 'subsystem == "com.click-to-min"'
 ```
 
 ## License
