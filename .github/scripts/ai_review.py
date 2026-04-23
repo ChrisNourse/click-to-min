@@ -1,19 +1,23 @@
 """
 AI code review via OpenRouter (Claude).
 
-Reads pr_diff.txt (full PR diff, text files only), sends it to the model,
-and posts (or replaces) a review comment on the PR. Requires environment
-variables: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO
+Posts pull request reviews with per-file inline comments (each individually
+resolvable). On subsequent pushes, reviews only the incremental diff and
+checks whether previous suggestions were resolved.
+
+Requires env: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO, EVENT_ACTION
 """
 import json
 import os
 import subprocess
 import urllib.request
 
-DIFF_FILE = "pr_diff.txt"
+FULL_DIFF = "pr_diff.txt"
+INCREMENTAL_DIFF = "pr_incremental_diff.txt"
 CLAUDE_MD = "CLAUDE.md"
 MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
+AI_REVIEW_MARKER = "<!-- ai-review-v2 -->"
 
 SYSTEM_PROMPT = """\
 Senior engineer. Review diff for all changed files — Swift, CI workflows, \
@@ -24,31 +28,45 @@ DRY violations, dead/unused code, long-term maintainability risks, readability p
 CI misconfigurations, missing test coverage for behavioral changes.
 Skip: style, formatting, brace placement — linters own that.
 
-Format: GitHub-flavored markdown."""
+Return a JSON object with two fields:
+- "summary": one-sentence overall assessment
+- "comments": array of objects, each with:
+  - "path": file path exactly as shown in diff header (after "b/")
+  - "line": line number in NEW file (right side of diff, from + in @@ headers)
+  - "body": one-line description: severity, problem, fix
+  - "suggestion": (optional) exact replacement code for that line — only when you have a concrete fix
+
+Line number rules:
+- Use line numbers from the new file (number after + in @@ hunk headers)
+- Only comment on lines present in the diff as additions (+) or context lines
+- Never comment on deleted lines (-)
+
+If no issues found, return {"summary": "LGTM", "comments": []}.
+
+Return ONLY valid JSON. No markdown fences. No text outside the JSON."""
+
+FOLLOWUP_ADDENDUM = """\
+
+This is a FOLLOW-UP review of incremental changes only. You are reviewing \
+ONLY the new commits, not the entire PR. Focus on:
+1. Whether previous suggestions (listed below) were addressed
+2. Any NEW issues introduced by these specific changes
+Do NOT raise issues about code that was not changed in this diff."""
 
 
 def load_claude_md() -> str:
-    """Load CLAUDE.md for project conventions and communication style."""
     if os.path.exists(CLAUDE_MD):
         with open(CLAUDE_MD) as f:
             return f.read()
     return ""
 
 
-def call_openrouter(api_key: str, repo: str, diff: str) -> str:
-    claude_md = load_claude_md()
-    system = SYSTEM_PROMPT
-    if claude_md:
-        system += f"\n\nProject conventions and style (from CLAUDE.md):\n\n{claude_md}"
-
+def call_openrouter(api_key: str, repo: str, user_content: str, system: str) -> str:
     payload = {
         "model": MODEL,
         "messages": [
             {"role": "system", "content": system},
-            {
-                "role": "user",
-                "content": f"Review this diff:\n\n```diff\n{diff}\n```",
-            },
+            {"role": "user", "content": user_content},
         ],
     }
     req = urllib.request.Request(
@@ -65,12 +83,97 @@ def call_openrouter(api_key: str, repo: str, diff: str) -> str:
     return result["choices"][0]["message"]["content"]
 
 
-def delete_previous_review(repo: str, pr_number: str) -> None:
-    """Remove any existing AI review comment so we don't stack duplicates."""
+def parse_diff_valid_lines(diff: str) -> dict[str, set[int]]:
+    """Build set of valid (file, line) pairs from new-file side of diff."""
+    valid: dict[str, set[int]] = {}
+    current_file = None
+    current_line = 0
+    for raw in diff.splitlines():
+        if raw.startswith("diff --git"):
+            current_file = None
+        elif raw.startswith("+++ b/"):
+            current_file = raw[6:]
+            valid.setdefault(current_file, set())
+        elif raw.startswith("@@ "):
+            hunk_info = raw.split("+")[1].split(" ")[0]
+            current_line = int(hunk_info.split(",")[0])
+        elif current_file is not None and not raw.startswith("---") and not raw.startswith("\\"):
+            if raw.startswith("-"):
+                pass
+            else:
+                valid[current_file].add(current_line)
+                current_line += 1
+    return valid
+
+
+def get_previous_review_threads(repo: str, pr_number: str) -> list[dict]:
+    """Fetch AI review threads and resolution status via GraphQL."""
+    owner, name = repo.split("/")
+    query = """
+    query($owner: String!, $name: String!, $pr: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 100) {
+            nodes {
+              isResolved
+              comments(first: 10) {
+                nodes {
+                  body
+                  path
+                  line
+                  author { login }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    result = subprocess.run(
+        [
+            "gh", "api", "graphql",
+            "-f", f"query={query}",
+            "-f", f"owner={owner}",
+            "-f", f"name={name}",
+            "-F", f"pr={pr_number}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Warning: could not fetch review threads: {result.stderr}")
+        return []
+
+    data = json.loads(result.stdout)
+    pr_data = data.get("data", {}).get("repository", {}).get("pullRequest")
+    if not pr_data:
+        return []
+
+    threads = []
+    for node in pr_data["reviewThreads"]["nodes"]:
+        comments = node["comments"]["nodes"]
+        if not comments:
+            continue
+        first = comments[0]
+        if first.get("author", {}).get("login") != "github-actions[bot]":
+            continue
+        threads.append({
+            "isResolved": node["isResolved"],
+            "path": first.get("path"),
+            "line": first.get("line"),
+            "body": first.get("body", ""),
+            "replies": [c.get("body", "") for c in comments[1:]],
+        })
+    return threads
+
+
+def delete_previous_issue_comments(repo: str, pr_number: str) -> None:
+    """Remove old-style (v1) AI review issue comments."""
     result = subprocess.run(
         [
             "gh", "api", f"repos/{repo}/issues/{pr_number}/comments",
-            "--jq", '.[] | select(.body | startswith("<!-- ai-review -->")) | .id',
+            "--jq", '.[] | select(.body | startswith("<!-- ai-review")) | .id',
         ],
         capture_output=True,
         text=True,
@@ -78,36 +181,170 @@ def delete_previous_review(repo: str, pr_number: str) -> None:
     for comment_id in result.stdout.strip().splitlines():
         subprocess.run(
             ["gh", "api", "-X", "DELETE", f"repos/{repo}/issues/comments/{comment_id}"],
+            capture_output=True,
+        )
+
+
+def create_review(repo: str, pr_number: str, summary: str,
+                  comments: list[dict], valid_lines: dict[str, set[int]]) -> None:
+    """Create PR review with inline comments via GitHub API."""
+    review_comments = []
+    skipped = 0
+    for comment in comments:
+        path = comment.get("path", "")
+        line = comment.get("line")
+        body = comment.get("body", "")
+        suggestion = comment.get("suggestion")
+
+        if not path or not line:
+            skipped += 1
+            continue
+        if path not in valid_lines or line not in valid_lines.get(path, set()):
+            print(f"  skip: {path}:{line} not in diff")
+            skipped += 1
+            continue
+
+        if suggestion:
+            body += f"\n\n```suggestion\n{suggestion}\n```"
+
+        review_comments.append({
+            "path": path,
+            "line": line,
+            "side": "RIGHT",
+            "body": body,
+        })
+
+    if skipped:
+        print(f"Skipped {skipped} comment(s) (line not in diff).")
+
+    review_body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\n{summary}"
+
+    if not review_comments:
+        subprocess.run(
+            ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", review_body],
             check=True,
         )
+        print("No inline comments. Posted summary as PR comment.")
+        return
+
+    payload = {
+        "body": review_body,
+        "event": "COMMENT",
+        "comments": review_comments,
+    }
+    result = subprocess.run(
+        [
+            "gh", "api", "-X", "POST",
+            f"repos/{repo}/pulls/{pr_number}/reviews",
+            "--input", "-",
+        ],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Review API error: {result.stderr}")
+        fallback = review_body + "\n\n" + "\n".join(
+            f"- **{c['path']}:{c['line']}** — {c['body']}" for c in comments
+        )
+        subprocess.run(
+            ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", fallback],
+            check=True,
+        )
+        print("Fell back to issue comment.")
+    else:
+        print(f"Review posted with {len(review_comments)} inline comment(s).")
 
 
 def main() -> None:
     api_key = os.environ["OPENROUTER_API_KEY"]
     pr_number = os.environ["PR_NUMBER"]
     repo = os.environ["REPO"]
+    event_action = os.environ.get("EVENT_ACTION", "opened")
 
-    with open(DIFF_FILE) as f:
+    # Incremental diff for follow-up pushes, full diff for initial review
+    is_followup = (
+        event_action == "synchronize"
+        and os.path.exists(INCREMENTAL_DIFF)
+        and os.path.getsize(INCREMENTAL_DIFF) > 0
+    )
+    diff_file = INCREMENTAL_DIFF if is_followup else FULL_DIFF
+
+    with open(diff_file) as f:
         diff = f.read()
 
     if not diff.strip():
-        print("No reviewable changes (binary files only?).")
+        print("No reviewable changes.")
         return
 
     if len(diff) > MAX_DIFF_CHARS:
-        diff = diff[:MAX_DIFF_CHARS] + "\n\n[diff truncated — showing first 60,000 characters]"
+        diff = diff[:MAX_DIFF_CHARS] + "\n\n[diff truncated]"
 
-    print(f"Sending {len(diff):,} chars to {MODEL}...")
-    review = call_openrouter(api_key, repo, diff)
+    # Build system prompt
+    claude_md = load_claude_md()
+    system = SYSTEM_PROMPT
+    if is_followup:
+        system += FOLLOWUP_ADDENDUM
+    if claude_md:
+        system += f"\n\nProject conventions (from CLAUDE.md):\n\n{claude_md}"
 
-    delete_previous_review(repo, pr_number)
+    # Build user prompt
+    label = "incremental " if is_followup else ""
+    user_content = f"Review this {label}diff:\n\n```diff\n{diff}\n```"
 
-    comment_body = f"<!-- ai-review -->\n### AI Code Review\n\n{review}"
-    subprocess.run(
-        ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", comment_body],
-        check=True,
-    )
-    print("Review posted.")
+    # Add previous review context for follow-ups
+    if is_followup:
+        previous = get_previous_review_threads(repo, pr_number)
+        resolved = [t for t in previous if t["isResolved"]]
+        unresolved = [t for t in previous if not t["isResolved"]]
+
+        if previous:
+            user_content += "\n\n--- Previous review context ---\n"
+            if resolved:
+                user_content += f"\n{len(resolved)} previous suggestion(s) RESOLVED.\n"
+            if unresolved:
+                user_content += f"\n{len(unresolved)} previous suggestion(s) still UNRESOLVED:\n"
+                for thread in unresolved:
+                    replies = ""
+                    if thread["replies"]:
+                        replies = " | Author replied: " + " / ".join(thread["replies"][:3])
+                    user_content += f"- {thread['path']}:{thread['line']} — {thread['body']}{replies}\n"
+                user_content += (
+                    "\nFor unresolved items: if new diff fixes them, note as resolved in summary. "
+                    "If still broken, re-flag. If author disagreed, weigh their argument.\n"
+                )
+
+    print(f"Sending {len(diff):,} chars to {MODEL} ({'follow-up' if is_followup else 'initial'})...")
+    raw = call_openrouter(api_key, repo, user_content, system)
+
+    # Parse JSON — strip markdown fences if Claude wrapped them
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        review = json.loads(text)
+    except json.JSONDecodeError:
+        print(f"JSON parse failed. Raw:\n{raw[:500]}")
+        body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\n{raw}"
+        subprocess.run(
+            ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", body],
+            check=True,
+        )
+        return
+
+    summary = review.get("summary", "No summary.")
+    comments = review.get("comments", [])
+
+    # Clean up old v1 issue comments
+    delete_previous_issue_comments(repo, pr_number)
+
+    # Validate comment lines against diff
+    valid_lines = parse_diff_valid_lines(diff)
+    create_review(repo, pr_number, summary, comments, valid_lines)
 
 
 if __name__ == "__main__":
