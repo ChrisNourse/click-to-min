@@ -31,8 +31,8 @@ final class DockPIDCache: DockPIDProviding {
     }
 
     deinit {
-        if let t = launchObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(t)
+        if let observer = launchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
     }
 
@@ -50,12 +50,12 @@ final class DockPIDCache: DockPIDProviding {
             withBundleIdentifier: Self.dockBundleID
         ).filter { !$0.isTerminated }
 
-        let best = candidates.max { a, b in
-            switch (a.launchDate, b.launchDate) {
+        let best = candidates.max { lhs, rhs in
+            switch (lhs.launchDate, rhs.launchDate) {
             case (nil, .some):
-                true // prefer b (non-nil date)
+                true // prefer rhs (non-nil date)
             case (.some, nil):
-                false // prefer a (non-nil date)
+                false // prefer lhs (non-nil date)
             case let (.some(da), .some(db)):
                 da < db // prefer later date
             case (nil, nil):

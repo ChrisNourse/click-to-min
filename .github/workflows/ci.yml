@@ -38,7 +38,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          BIN=$(find .build/debug -name "ClickToMinPackageTests.xctest" -type d | head -1)/Contents/MacOS/ClickToMinPackageTests
+          BIN=$(find .build/debug -name "ClickToMinTests.xctest" -type d | head -1)/Contents/MacOS/ClickToMinTests
           PROFDATA=$(find .build/debug/codecov -name "*.profdata" | head -1)
           xcrun llvm-cov export -format=lcov "$BIN" -instr-profile="$PROFDATA" \
             --ignore-filename-regex="(\.build|Tests)" > coverage.lcov
