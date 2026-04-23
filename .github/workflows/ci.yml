@@ -38,8 +38,10 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          BIN=$(find -L .build/debug -name "ClickToMinTests.xctest" -type d | head -1)/Contents/MacOS/ClickToMinTests
-          PROFDATA=$(find -L .build/debug/codecov -name "*.profdata" | head -1)
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST=$(find -L "$BIN_PATH" -name "*.xctest" -type d | head -1)
+          BIN="${XCTEST}/Contents/MacOS/$(basename "${XCTEST}" .xctest)"
+          PROFDATA=$(find -L "$BIN_PATH/codecov" -name "*.profdata" | head -1)
           xcrun llvm-cov export -format=lcov "$BIN" -instr-profile="$PROFDATA" \
             --ignore-filename-regex="(\.build|Tests)" > coverage.lcov
 
