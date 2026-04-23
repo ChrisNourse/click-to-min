@@ -8,15 +8,9 @@ CI fail → read logs, find root cause, fix. Don't summarise failure back — us
 
 ---
 
-## Build & test
+## CI
 
-```bash
-swift build -c debug
-swift test --parallel
-./build.sh                    # assemble ClickToMin.app
-```
-
-SwiftFormat + SwiftLint run in CI. Don't run manually.
+CI runs build, test, lint, bundle-check. Read logs. Fix errors. Push. Don't re-run locally.
 
 Runner pin `macos-14` (arm64). Intentional. Don't change to `macos-latest`.
 
