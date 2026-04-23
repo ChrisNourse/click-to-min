@@ -1,27 +1,25 @@
 # CLAUDE.md — click-to-min
 
-## Behaviour rules
+## Behaviour
 
-No preamble. No "Great question!" or "Sure, I can help with that." Start with the fix or the answer.
+No preamble. No "Great question!" Fix thing. Do it. Open PR.
 
-When asked to fix something: fix it, commit it, open a PR. Don't explain what you're about to do — just do it.
-
-When CI fails: read the logs, identify root cause, fix it. Don't summarise the failure back at the user — they can see it.
+CI fail → read logs, find root cause, fix. Don't summarise failure back — user see it.
 
 ---
 
 ## Build & test
 
 ```bash
-swift build -c debug          # build
-swift test --parallel         # run tests
-swiftformat Sources           # fix formatting in-place
-swiftformat Sources --lint    # check only (same as CI)
-swiftlint lint --strict --config .swiftlint.yml Sources  # lint (same as CI)
+swift build -c debug
+swift test --parallel
+swiftformat Sources           # fix in-place
+swiftformat Sources --lint    # check only
+swiftlint lint --strict --config .swiftlint.yml Sources
 ./build.sh                    # assemble ClickToMin.app
 ```
 
-CI runs on `macos-14` (arm64). Runner pin is intentional — do not change to `macos-latest`.
+Runner pin `macos-14` (arm64). Intentional. Don't change to `macos-latest`.
 
 ---
 
@@ -31,51 +29,48 @@ CI runs on `macos-14` (arm64). Runner pin is intentional — do not change to `m
 Sources/ClickToMin/Core/   — pure logic. No AppKit, no ApplicationServices, no I/O.
 Sources/ClickToMin/IO/     — AX/NSWorkspace/CGEventTap adapters. Conform to Core protocols.
 Sources/ClickToMin/        — AppDelegate + DockWatcher coordinator. Wires IO into Core.
-Tests/ClickToMinTests/     — XCTest. Tests Core directly; fakes for IO.
+Tests/ClickToMinTests/     — XCTest. Tests Core; fakes for IO.
 ```
 
-**The rule that keeps things simple:** branching logic lives only in `Core/ClickPipeline.swift`. IO adapters are dumb wiring. If you want to add an `if` to an IO adapter, it probably belongs in the pipeline instead.
+Branching logic only in `Core/ClickPipeline.swift`. IO adapters = dumb wiring. `if` in adapter → belongs in pipeline instead.
 
-Protocols live in `Core/PipelineProtocols.swift`. IO types in `Core/` is a build error — the `ClickToMinCore` target excludes `ApplicationServices` and `AppKit` at the compiler level.
+Protocols in `Core/PipelineProtocols.swift`. IO types in `Core/` = build error. `ClickToMinCore` target excludes `AppKit`/`ApplicationServices` at compiler level.
 
 ---
 
-## Coding conventions
+## Conventions
 
-### Notification observer variables
-Always name the unwrapped token `observer`:
+### Notification observer tokens
 ```swift
 if let observer = wakeObserver {
     NSWorkspace.shared.notificationCenter.removeObserver(observer)
 }
 ```
+Always `observer`. Not `t`, not `obs`.
 
 ### Identifier names
-No single-character variables except loop indices (`i`) and standard math (`x`, `y` — already excluded by SwiftLint config). Use descriptive names: `lhs`/`rhs` for comparator closures, `observer` for notification tokens, `elem` for loop elements.
+No single-char vars. `lhs`/`rhs` for comparator closures. `observer` for notification tokens. `elem` for loop elements.
 
 ### AX/CF force casts
-`as!` is intentional in IO adapters. `AXUIElement`, `AXValue`, `CFBoolean`, `CFURL` are CF types that don't support conditional Swift casts. The cast is safe by API contract. `force_cast` is disabled in `.swiftlint.yml` for this reason — don't re-enable it, don't add per-line suppressions.
+`as!` intentional in IO adapters. `AXUIElement`, `AXValue`, `CFBoolean`, `CFURL` = CF types, no conditional Swift cast possible. Safe by API contract. `force_cast` disabled in `.swiftlint.yml`. Don't re-enable. Don't add per-line suppressions.
 
 ### Brace placement
-SwiftFormat owns this. It uses Allman style for multi-line conditions (brace on its own line). `opening_brace` is disabled in `.swiftlint.yml` to prevent the two tools conflicting. Don't fight it.
-
-### What SwiftLint/SwiftFormat already enforce
-Don't manually check or comment on: trailing whitespace, import ordering, brace spacing, line length (up to 160), TODOs. The linters catch all of these in CI.
+SwiftFormat owns. Allman style on multi-line conditions. `opening_brace` disabled in `.swiftlint.yml`. Don't fight it.
 
 ### Logging
-Use `os_log` with the categories defined in `IO/Log.swift` (`Log.lifecycle`, `Log.pipeline`). No `print()`.
+`os_log` with categories from `IO/Log.swift` (`Log.lifecycle`, `Log.pipeline`). No `print()`.
 
-### Delays and timing
-Magic numbers for timing go in named constants (`WindowMinimizer.postClickDelay`, `ClickDebouncer.debounceInterval`). Never inline a bare `0.18` or `0.3`.
+### Timing constants
+Named constants only. `WindowMinimizer.postClickDelay`, `ClickDebouncer.debounceInterval`. No bare `0.18` or `0.3`.
 
 ---
 
 ## PR workflow
 
-Branch naming: `fix/short-description`, `feat/short-description`, `chore/short-description`.
+Branch: `fix/`, `feat/`, `chore/`, `ci/`, `docs/` prefix.
 
-Commit style: `type: short summary` — `fix:`, `feat:`, `chore:`, `docs:`, `ci:`. Body optional.
+Commit: `type: short summary`. Body optional.
 
-CI must be green before merge: `build-test`, `lint`, `bundle-check`. `Analyze (Swift)` (CodeQL) is allowed to be pending.
+Green before merge: `build-test`, `lint`, `bundle-check`. CodeQL pending = ok.
 
-Squash-merge is the norm.
+Squash-merge.
