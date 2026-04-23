@@ -24,6 +24,7 @@ BIN_PATH="$(swift build -c release --show-bin-path)/$APP_NAME"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BIN_PATH" "$BUNDLE/Contents/MacOS/$APP_NAME"
 cp Resources/Info.plist "$BUNDLE/Contents/Info.plist"
+cp Resources/AppIcon.icns "$BUNDLE/Contents/Resources/AppIcon.icns"
 
 plutil -lint "$BUNDLE/Contents/Info.plist"
 
