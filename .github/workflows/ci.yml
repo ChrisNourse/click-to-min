@@ -15,6 +15,8 @@ jobs:
     # Runner pin: macos-14 (Sonoma, arm64). Do not use macos-latest — toolchain
     # drift silently breaks builds. Re-pin deliberately when upgrading.
     runs-on: macos-14
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
