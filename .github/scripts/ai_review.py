@@ -17,7 +17,7 @@ MODEL = "anthropic/claude-opus-4"
 SYSTEM_PROMPT = """\
 Senior Swift engineer. Review diff. Terse. No filler. No praise.
 
-Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths.
+Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths, DRY violations, dead/unused code, long-term maintainability risks.
 Skip: style, formatting, brace placement — linters own that.
 
 Project conventions (don't flag these as issues):
