@@ -47,15 +47,25 @@ A fast-path Dock geometry check short-circuits ~99% of global clicks before any 
 
 1. Download `ClickToMin-vX.X.X.dmg` from the [latest release](../../releases/latest)
 2. Open the DMG and drag **ClickToMin** into **Applications**
-3. First launch: right-click the app → **Open** → **Open** (Gatekeeper bypass for ad-hoc signed builds)
-4. Grant Accessibility when prompted — System Settings → Privacy & Security → Accessibility
+3. Clear the quarantine flag (see [Installing an unsigned build](#installing-an-unsigned-build) below)
+4. Launch **ClickToMin** from Applications
+5. Grant Accessibility when prompted — System Settings → Privacy & Security → Accessibility
 
 The `↓` icon appears in your menu bar; ClickToMin is running.
 
-> **Alternative Gatekeeper bypass:**
-> ```bash
-> xattr -dr com.apple.quarantine /Applications/ClickToMin.app
-> ```
+### Installing an unsigned build
+
+ClickToMin releases are **ad-hoc signed**, not signed with a paid Apple Developer ID. macOS Gatekeeper will refuse to launch the app until you clear its quarantine flag. This is a one-time step per install.
+
+**One-line fix (recommended):**
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ClickToMin.app
+```
+
+**Or, via Finder:** right-click `ClickToMin.app` → **Open** → **Open** in the confirmation dialog. macOS remembers the exception after the first launch.
+
+**Why unsigned?** Apple's Developer ID (which removes Gatekeeper warnings entirely) requires a $99/year Apple Developer Program membership. For a side-project utility that would rather not charge users or accept donations, the tradeoff is the one-line `xattr` step. If you're uncomfortable running unsigned code, building from source (below) produces an identical ad-hoc-signed binary under your own control.
 
 ### Build from source
 
@@ -84,7 +94,7 @@ Permission is verified on every launch and after every system wake. If access is
 ClickToMin uses a strict **Core / I/O** split enforced at compile time by the SwiftPM target boundary. `ClickToMinCore` (pure logic) has no AppKit or ApplicationServices imports, which lets the entire pipeline be exercised with in-memory fakes.
 
 ```
-GlobalClickMonitor  (NSEvent global tap)
+GlobalClickMonitor  (CGEventTap, session-wide)
         │
         ▼
    DockWatcher       (coordinator — wires Core ↔ I/O)
@@ -119,6 +129,10 @@ swift test --parallel
 log stream --predicate 'subsystem == "com.click-to-min"'
 ```
 
+## Contributing
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, lint, and PR workflow.
+
 ## License
 
-MIT
+GPL-3.0-or-later — see [LICENSE](LICENSE).
