@@ -23,9 +23,10 @@ Only the focused window minimizes, not all windows of the app. This matches user
 
 ## Technical Approach
 
-- `NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown)` — passive global click monitor (doesn't consume events)
-  - **Modifier/button scope**: monitor `.leftMouseDown` only. Right-click and Ctrl-click on Dock items open the context menu; we deliberately ignore them. Document in source so the scope isn't "accidentally expanded" later.
-  - **Important**: the global monitor only delivers out-of-process events once Accessibility is granted. Install it *after* `AXIsProcessTrusted()` returns true, and reinstall on re-grant. Installing it before permission silently yields no events even after the user grants permission.
+- **`CGEventTap` at `.cgSessionEventTap` (listen-only)** — passive session-wide click monitor (doesn't consume events). We originally used `NSEvent.addGlobalMonitorForEvents`, but it does not fire for clicks on the Dock process on recent macOS versions; a session-level `CGEventTap` is the reliable replacement. See PR #4.
+  - **Modifier/button scope**: tap `.leftMouseDown` only. Right-click and Ctrl-click on Dock items open the context menu; we deliberately ignore them. Document in source so the scope isn't "accidentally expanded" later.
+  - **Important**: the tap only creates successfully once Accessibility is granted. Install it *after* `AXIsProcessTrusted()` returns true, and reinstall on re-grant. `CGEvent.tapCreate` returns nil pre-permission.
+  - **Self-healing**: when the system disables the tap (e.g., slow callback), the monitor re-enables it on the next event via `tapEnable(tap, enable: true)`.
 - **Dock-frame short-circuit**: before any AX call, test whether the click point falls inside the cached Dock screen region. Skip AX entirely otherwise.
 - `AXUIElementCopyElementAtPosition` only for clicks inside the Dock region
 - Set a short AX messaging timeout via `AXUIElementSetMessagingTimeout` on **both** the system-wide element (hit testing) and the per-app element (minimize call) to avoid stalls on unresponsive apps (full-screen/Stage Manager edge cases)
@@ -53,7 +54,7 @@ To enable unit testing without a live user session, the codebase is split into t
 
 **I/O layer** (thin adapters; integration-tested manually):
 - `AXDockFrameProvider` — queries live Dock AX bounds; conforms to `DockFrameProvider`
-- `GlobalClickMonitor` — wraps `NSEvent.addGlobalMonitorForEvents`
+- `GlobalClickMonitor` — wraps `CGEventTap` at `.cgSessionEventTap` (listen-only, `.leftMouseDown`)
 - `AXHitTester` — wraps `AXUIElementCopyElementAtPosition` and attribute reads
 - `DockPIDCache` — caches `com.apple.dock`'s PID; refreshes on Dock launch notification
 - `WindowMinimizer` — wraps `kAXFocusedWindowAttribute` read + `kAXMinimizedAttribute` set; applies `AXUIElementSetMessagingTimeout(app, 0.25)` to the per-app element
@@ -161,10 +162,11 @@ This separation enforces the boundary at the compiler level: core can't accident
 - **Auto-hide handling**: if the Dock is auto-hidden (readable via `CFPreferencesCopyAppValue("autohide" as CFString, "com.apple.dock" as CFString)`), widen the cached rect to a **5pt screen-edge strip** (macOS's reveal hot-zone width) along the Dock's configured edge so the short-circuit still triggers while the Dock is revealed. Fallback chain if 5pt proves too narrow in testing: escalate to 10pt, then to a full-edge strip (entire screen edge along the Dock's configured side). Full-edge strip widens the false-positive region slightly — acceptable since all it costs is one extra AX hit-test per edge click while the Dock is hidden.
 
 **`IO/GlobalClickMonitor.swift`**
-- Wraps `NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown)`
-- Emits `CGPoint` click locations via a closure
-- **Install lifecycle**: must be installed only after `AXIsProcessTrusted()` returns true; no events fire without that. Exposes `start()` / `stop()` so `AppDelegate` can re-install on re-grant.
-- **Known caveats** (documented, not bugs): global monitor does not fire for clicks on the app's own windows (moot — `LSUIElement`, no windows) and does not fire while the screen is locked.
+- Wraps a session-level `CGEventTap` (`.cgSessionEventTap`, `.listenOnly`, mask = `1 << CGEventType.leftMouseDown.rawValue`)
+- Emits `CGPoint` click locations (in top-left origin) via a closure
+- **Install lifecycle**: must be installed only after `AXIsProcessTrusted()` returns true; `CGEvent.tapCreate` returns nil without it. Exposes `start()` / `stop()` so `AppDelegate` can re-install on re-grant.
+- **Self-healing**: if the system disables the tap (slow callback), re-enable it inline on the next event via `CGEvent.tapEnable`.
+- **History**: originally `NSEvent.addGlobalMonitorForEvents`; that monitor silently drops clicks on the Dock process on recent macOS, so we moved to CGEventTap (PR #4).
 
 **`IO/DockPIDCache.swift`**
 - Caches `NSRunningApplication` instances matching `bundleIdentifier == "com.apple.dock"` → `pid_t`
@@ -181,7 +183,9 @@ This separation enforces the boundary at the compiler level: core can't accident
 - `func pid(_ element: AXUIElement) -> pid_t?`
 
 **`IO/WindowMinimizer.swift`**
-- `func minimizeFocusedWindow(of app: NSRunningApplication)` — creates `AXUIElementCreateApplication(app.processIdentifier)`, applies `AXUIElementSetMessagingTimeout(appElement, 0.25)`, reads `kAXFocusedWindowAttribute`, no-ops if nil, otherwise sets `kAXMinimizedAttribute = true`
+- `func minimizeFocusedWindow(ofPid pid: pid_t, bundleURL: URL?)` — creates `AXUIElementCreateApplication(pid)`, applies `AXUIElementSetMessagingTimeout(appElement, 0.25)`, reads `kAXFocusedWindowAttribute`, no-ops if nil.
+- **Already-minimized short-circuit**: reads `kAXMinimizedAttribute` on the focused window; if already true, treats the click as a restore and bails. Prevents the "minimize immediately unminimizes" race where the user clicks the Dock icon to restore.
+- **Deferred dispatch**: the actual `kAXMinimizedAttribute = true` set is scheduled via `DispatchQueue.main.asyncAfter(deadline: .now() + postClickDelay)` with `postClickDelay: TimeInterval = 0.18`. Without the delay the Dock's own click handler runs *after* our set and re-activates the window, visually un-minimizing it. 180ms is the empirically-shortest interval that reliably outruns the Dock's handler on Sonoma/Sequoia; shorter values sporadically race.
 - Note: `kAXMinimizedAttribute` set is asynchronous — the call returns before the window animates. Do not assert visual state from this call.
 
 **`IO/FrontmostAppProvider.swift`**
@@ -321,6 +325,8 @@ All disabled by default in release via `os_log`'s private/public annotations —
 | Accessibility granted mid-session (no sleep/wake) | 2s poll detects grant and installs monitor |
 | Rapid double-clicks | 300ms same-item debounce, keyed by bundle URL string (survives relaunch) |
 | App frontmost, no focused window (all minimized) | `kAXFocusedWindowAttribute` nil → no-op, macOS default restore runs |
+| Restore-click race (app frontmost, click Dock to restore a minimized window) | `WindowMinimizer` reads `kAXMinimizedAttribute`; already-true → no-op so macOS default restore runs cleanly |
+| Minimize immediately un-minimizing | 180ms `postClickDelay` deferred dispatch lets the Dock's own click handler run first, so our `kAXMinimizedAttribute = true` wins |
 | Dock process restart | `DockGeometry` refreshes on Dock relaunch notification |
 | Screen resolution / arrangement changes | `DockGeometry` refreshes on `didChangeScreenParametersNotification` |
 | Dock resized / moved / auto-hide toggled | `DockGeometry` refreshes on `com.apple.dock.prefchanged` distributed notification |
