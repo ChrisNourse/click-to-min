@@ -21,7 +21,7 @@
   - [ ] Grant Accessibility in System Settings
   - [ ] Quit via menu bar exits cleanly (no lingering process via `ps`)
   - [ ] Re-measured memory & idle CPU; `PERF.md` updated; >20% regression flagged
-  - [ ] `log stream --predicate 'subsystem == "com.chrisno.click-to-min"'` shows expected lifecycle signposts
+  - [ ] `log stream --predicate 'subsystem == "com.click-to-min"'` shows expected lifecycle signposts
 - **Verification step**:
   - Capture `log stream` output for 10s post-launch; diff against expected signposts (permission granted, monitor installed, Dock PID refreshed).
 - **Notes**: PLAN.md §Layer 2 Smoke.
@@ -68,12 +68,12 @@
   - [ ] Sleep/wake cycle → re-check fires, still works
   - [ ] Fresh install: launch pre-grant, grant after → events start flowing
   - [ ] Rebuild via `./build.sh` → Accessibility persists
-  - [ ] `tccutil reset Accessibility com.chrisno.click-to-min` → next launch re-prompts cleanly
+  - [ ] `tccutil reset Accessibility com.click-to-min` → next launch re-prompts cleanly
   - [ ] Resize / move / auto-hide / disable auto-hide all refresh frame
   - [ ] Rapid double-click → exactly one minimize
   - [ ] Click during app launch animation → no crash
 - **Verification step**:
-  - `tccutil reset Accessibility com.chrisno.click-to-min && open ClickToMin.app` — confirms full recovery path.
+  - `tccutil reset Accessibility com.click-to-min && open ClickToMin.app` — confirms full recovery path.
 - **Notes**: PLAN.md §Layer 2 Permission Lifecycle / Dock Configuration / Race Conditions.
 
 ### T-6.5 — Layer 3 Performance Validation + populate `PERF.md`
