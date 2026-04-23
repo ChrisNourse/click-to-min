@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 180">
+  <!-- Background -->
+  <rect width="800" height="180" rx="14" fill="#1c1c1e"/>
+
+  <!-- ============ ILLUSTRATION (left 260px) ============ -->
+
+  <!-- macOS window body -->
+  <rect x="20" y="14" width="200" height="95" rx="8" fill="#2c2c2e"/>
+  <!-- Title bar (rounded top corners only) -->
+  <rect x="20" y="14" width="200" height="28" rx="8" fill="#3a3a3c"/>
+  <!-- Square off the bottom corners of the title bar -->
+  <rect x="20" y="34" width="200" height="8" fill="#3a3a3c"/>
+  <!-- Traffic lights -->
+  <circle cx="40" cy="28" r="5.5" fill="#ff5f57"/>
+  <circle cx="58" cy="28" r="5.5" fill="#febc2e"/>
+  <circle cx="76" cy="28" r="5.5" fill="#28c840"/>
+  <!-- Fake content lines -->
+  <rect x="32" y="54" width="152" height="5" rx="2.5" fill="#48484a"/>
+  <rect x="32" y="66" width="118" height="5" rx="2.5" fill="#3a3a3c"/>
+  <rect x="32" y="78" width="136" height="5" rx="2.5" fill="#48484a"/>
+  <rect x="32" y="90" width="88"  height="5" rx="2.5" fill="#3a3a3c"/>
+  <!-- Blue minimize arrow centered in the window body -->
+  <line x1="120" y1="52" x2="120" y2="68"
+        stroke="#0a84ff" stroke-width="2.5" stroke-linecap="round"/>
+  <polyline points="113,62 120,69 127,62"
+            fill="none" stroke="#0a84ff" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Dotted trajectory: window → dock -->
+  <line x1="120" y1="110" x2="120" y2="128"
+        stroke="#48484a" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+  <!-- Dock bar -->
+  <rect x="20" y="130" width="200" height="32" rx="16"
+        fill="#2c2c2e" stroke="#48484a" stroke-width="1"/>
+  <!-- Dock app icons -->
+  <rect x="32"  y="138" width="16" height="16" rx="4" fill="#30d158"/>
+  <rect x="54"  y="138" width="16" height="16" rx="4" fill="#ff453a"/>
+  <rect x="76"  y="138" width="16" height="16" rx="4" fill="#ffd60a"/>
+  <!-- Highlighted dock icon (the one being clicked) -->
+  <rect x="98"  y="136" width="20" height="20" rx="5" fill="#0a84ff"/>
+  <!-- Dock separator -->
+  <line x1="124" y1="141" x2="124" y2="157" stroke="#48484a" stroke-width="1"/>
+  <rect x="130" y="138" width="16" height="16" rx="4" fill="#bf5af2"/>
+  <rect x="152" y="138" width="16" height="16" rx="4" fill="#ff9f0a"/>
+  <rect x="174" y="138" width="16" height="16" rx="4" fill="#64d2ff"/>
+  <rect x="196" y="138" width="16" height="16" rx="4" fill="#5e5ce6"/>
+
+  <!-- Mouse cursor (tip at the highlighted dock icon) -->
+  <g transform="translate(108, 128)">
+    <!-- Shadow/outline pass -->
+    <path d="M0 0 L0 15 L4 11 L7 17 L9.5 16 L6.5 10 L11.5 10 Z"
+          fill="#1c1c1e" stroke="#1c1c1e" stroke-width="2.5" stroke-linejoin="round"/>
+    <!-- White fill -->
+    <path d="M0 0 L0 15 L4 11 L7 17 L9.5 16 L6.5 10 L11.5 10 Z"
+          fill="white"/>
+  </g>
+  <!-- Click ripple rings centred on the highlighted icon -->
+  <circle cx="108" cy="146" r="14" fill="none" stroke="#0a84ff" stroke-width="1" opacity="0.35"/>
+  <circle cx="108" cy="146" r="8"  fill="none" stroke="#0a84ff" stroke-width="1" opacity="0.2"/>
+
+  <!-- ============ VERTICAL DIVIDER ============ -->
+  <line x1="262" y1="18" x2="262" y2="162" stroke="#38383a" stroke-width="1"/>
+
+  <!-- ============ TEXT (right of divider) ============ -->
+
+  <!-- App name -->
+  <text x="292" y="82"
+        font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="52" font-weight="800" fill="white" letter-spacing="-2">ClickToMin</text>
+
+  <!-- Tagline -->
+  <text x="294" y="110"
+        font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="18" fill="#8e8e93">Click your Dock icon to minimize.</text>
+
+  <!-- Badge: macOS 13+ -->
+  <rect x="294" y="126" width="96" height="24" rx="12"
+        fill="#2c2c2e" stroke="#48484a" stroke-width="1"/>
+  <text x="342" y="142"
+        font-family="'Menlo', 'Monaco', 'Courier New', monospace"
+        font-size="11" fill="#8e8e93" text-anchor="middle">macOS 13+</text>
+
+  <!-- Badge: Swift 5.9 -->
+  <rect x="398" y="126" width="80" height="24" rx="12"
+        fill="#2c2c2e" stroke="#48484a" stroke-width="1"/>
+  <text x="438" y="142"
+        font-family="'Menlo', 'Monaco', 'Courier New', monospace"
+        font-size="11" fill="#8e8e93" text-anchor="middle">Swift 5.9</text>
+
+  <!-- Badge: menu bar -->
+  <rect x="486" y="126" width="88" height="24" rx="12"
+        fill="#2c2c2e" stroke="#48484a" stroke-width="1"/>
+  <text x="530" y="142"
+        font-family="'Menlo', 'Monaco', 'Courier New', monospace"
+        font-size="11" fill="#8e8e93" text-anchor="middle">menu bar</text>
+</svg>

@@ -24,7 +24,9 @@
 	<true/>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
-	<key>NSAccessibilityUsageDescription</key>
-	<string>ClickToMin needs Accessibility access to detect Dock clicks and minimize the focused window of the active app.</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>ClickToMin needs Accessibility access to detect Dock clicks and minimize the focused window of the active app.</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
 </dict>
 </plist>
