@@ -9,7 +9,7 @@
 #   - Verify menu bar icon appears
 #   - Verify Accessibility prompt fires on first launch
 #   - Quit via the menu item; confirm `ps -A | grep ClickToMin` is empty
-#   - Run: log stream --predicate 'subsystem == "com.chrisno.click-to-min"'
+#   - Run: log stream --predicate 'subsystem == "com.click-to-min"'
 #     and confirm lifecycle signposts appear
 set -euo pipefail
 

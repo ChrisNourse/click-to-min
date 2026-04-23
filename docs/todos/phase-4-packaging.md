@@ -13,11 +13,11 @@
 - **Depends on**: T-3.3
 - **Blocks**: T-4.2, T-5.2 (bundle-check)
 - **Files**: `Resources/Info.plist`
-- **Description**: Per PLAN.md §Info.plist: `LSUIElement = YES`, `LSMinimumSystemVersion = 13.0`, `NSAccessibilityUsageDescription`, `CFBundleIdentifier = com.chrisno.click-to-min`, `CFBundleName = ClickToMin`. Comment why `LSUIElement` and `NSApp.setActivationPolicy(.accessory)` both exist.
+- **Description**: Per PLAN.md §Info.plist: `LSUIElement = YES`, `LSMinimumSystemVersion = 13.0`, `NSAccessibilityUsageDescription`, `CFBundleIdentifier = com.click-to-min`, `CFBundleName = ClickToMin`. Comment why `LSUIElement` and `NSApp.setActivationPolicy(.accessory)` both exist.
 - **Acceptance criteria**:
   - [ ] All 5 keys present with correct types
   - [ ] `plutil -lint Resources/Info.plist` returns OK
-  - [ ] Bundle identifier exactly `com.chrisno.click-to-min`
+  - [ ] Bundle identifier exactly `com.click-to-min`
   - [ ] Minimum version matches `Package.swift` (13.0)
 - **Verification step**:
   - `plutil -lint Resources/Info.plist` — must report OK. Run after every edit.
@@ -49,7 +49,7 @@
   - [ ] Menu bar icon appears
   - [ ] Accessibility prompt fires on first launch
   - [ ] Quit menu item exits cleanly (`ps -A | grep ClickToMin` empty after)
-  - [ ] `log stream --predicate 'subsystem == "com.chrisno.click-to-min"'` shows `lifecycle` signposts
+  - [ ] `log stream --predicate 'subsystem == "com.click-to-min"'` shows `lifecycle` signposts
 - **Verification step**:
   - Perform steps above on the Phase 4 machine; paste terminal + `log stream` output into the commit / PR description.
 - **Notes**: This is the gate into Phase 6. If this fails, do not proceed to Phase 6 QA.
