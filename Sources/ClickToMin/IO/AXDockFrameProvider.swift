@@ -81,8 +81,8 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
     }
 
     deinit {
-        if let t = screenObserver { NotificationCenter.default.removeObserver(t) }
-        if let t = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(t) }
+        if let observer = screenObserver { NotificationCenter.default.removeObserver(observer) }
+        if let observer = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         DistributedNotificationCenter.default().removeObserver(self)
     }
 
