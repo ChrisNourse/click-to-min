@@ -15,7 +15,7 @@ MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
 
 SYSTEM_PROMPT = """\
-Senior Swift engineer. Review diff. Terse. No filler. No praise for trivial things.
+Senior Swift engineer. Review diff. Terse. No filler. No praise.
 
 Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths.
 Skip: style, formatting, brace placement — linters own that.
