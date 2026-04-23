@@ -25,10 +25,48 @@ jobs:
       - name: Assemble .app bundle
         run: ./build.sh
 
-      - name: Zip app bundle
-        run: ditto -c -k --keepParent ClickToMin.app ClickToMin.zip
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        # Produces a drag-to-Applications DMG. create-dmg handles the
+        # Applications-folder symlink, window geometry, and icon
+        # positioning automatically.
+        #
+        # NOTE: the app is only ad-hoc codesigned. Users will still need
+        # to right-click → Open the first time because Gatekeeper cannot
+        # verify an ad-hoc signature. Notarization is the proper fix
+        # (see top-of-file TODO) and requires an Apple Developer Program
+        # membership + secrets on this repo.
+        run: |
+          mkdir -p dmg-staging
+          cp -R ClickToMin.app dmg-staging/
+          create-dmg \
+            --volname "ClickToMin ${GITHUB_REF_NAME}" \
+            --window-pos 200 120 \
+            --window-size 540 360 \
+            --icon-size 96 \
+            --icon "ClickToMin.app" 140 180 \
+            --app-drop-link 400 180 \
+            --hide-extension "ClickToMin.app" \
+            --no-internet-enable \
+            "ClickToMin-${GITHUB_REF_NAME}.dmg" \
+            dmg-staging/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ClickToMin.zip
+          files: ClickToMin-${{ github.ref_name }}.dmg
+          body: |
+            ## Install
+
+            1. Download `ClickToMin-${{ github.ref_name }}.dmg` below
+            2. Open it, drag **ClickToMin** into **Applications**
+            3. First launch: right-click the app → **Open** → **Open** (Gatekeeper bypass for ad-hoc signed builds)
+            4. Grant Accessibility when prompted (System Settings → Privacy & Security → Accessibility)
+
+            The app is ad-hoc signed, not notarized. If you prefer, you can clear the quarantine attribute instead:
+
+            ```
+            xattr -dr com.apple.quarantine /Applications/ClickToMin.app
+            ```
