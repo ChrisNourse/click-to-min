@@ -1,7 +1,7 @@
 """
 AI code review via OpenRouter (Claude).
 
-Reads pr_diff.txt (full PR diff, all file types), sends it to the model,
+Reads pr_diff.txt (full PR diff, text files only), sends it to the model,
 and posts (or replaces) a review comment on the PR. Requires environment
 variables: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO
 """
