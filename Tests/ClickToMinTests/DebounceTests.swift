@@ -114,6 +114,15 @@ final class DebounceTests: XCTestCase {
         XCTAssertTrue(debouncer.shouldAllow(itemID: "x"))  // elapsed from t=0 = 0.35 > 0.3
     }
 
+    // MARK: - Default init (real clock)
+
+    /// Exercises the default `now: { Date() }` parameter so the default
+    /// closure is covered.
+    func testDefaultInit_firstClickAllowed() {
+        let debouncer = ClickDebouncer()
+        XCTAssertTrue(debouncer.shouldAllow(itemID: "default-init-test"))
+    }
+
     // MARK: - Multiple items independent
 
     func testMultipleItemsIndependent() {

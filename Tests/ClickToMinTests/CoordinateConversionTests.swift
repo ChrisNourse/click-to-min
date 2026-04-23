@@ -159,4 +159,20 @@ final class CoordinateConversionTests: XCTestCase {
         XCTAssertEqual(ax.x, 100, accuracy: 0.001)
         XCTAssertEqual(ax.y, 200, accuracy: 0.001)
     }
+
+    // MARK: - No primary screen fallback
+
+    /// If no screen has origin (0, 0), the converter falls back to
+    /// the tallest screen's maxY for the flip.
+    func testNoPrimaryScreen_fallsBackToTallest() {
+        let screenA = CGRect(x: 100, y: 100, width: 1920, height: 1080)
+        let screenB = CGRect(x: 2020, y: 100, width: 1440, height: 900)
+        let converter = CoordinateConverter(screenFrames: [screenA, screenB])
+
+        let ax = converter.toAX(CGPoint(x: 500, y: 300))
+
+        XCTAssertEqual(ax.x, 500, accuracy: 0.001)
+        // tallest maxY = 100 + 1080 = 1180; axY = 1180 - 300 = 880
+        XCTAssertEqual(ax.y, 880, accuracy: 0.001)
+    }
 }

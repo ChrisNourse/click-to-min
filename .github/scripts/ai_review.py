@@ -9,6 +9,7 @@ Requires env: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO, EVENT_ACTION
 """
 import json
 import os
+import re
 import subprocess
 import urllib.request
 
@@ -407,19 +408,45 @@ def main() -> None:
     print(f"Sending {len(diff):,} chars to {MODEL} ({'follow-up' if is_followup else 'initial'})...")
     raw = call_openrouter(api_key, repo, user_content, system)
 
-    # Parse JSON — strip markdown fences if Claude wrapped them
+    # Parse JSON — try raw first, then strip fences, then extract from prose
     text = raw.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+    review = None
 
+    # 1. Try raw text as JSON
     try:
         review = json.loads(text)
     except json.JSONDecodeError:
+        pass
+
+    # 2. Strip markdown fences (```json ... ```)
+    if review is None and "```" in text:
+        fence_match = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL)
+        if fence_match:
+            try:
+                review = json.loads(fence_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+
+    # 3. Extract first JSON object from anywhere in the response
+    if review is None:
+        brace_start = text.find("{")
+        if brace_start != -1:
+            depth = 0
+            for idx in range(brace_start, len(text)):
+                if text[idx] == "{":
+                    depth += 1
+                elif text[idx] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            review = json.loads(text[brace_start:idx + 1])
+                        except json.JSONDecodeError:
+                            pass
+                        break
+
+    if review is None:
         print(f"JSON parse failed. Raw:\n{raw[:500]}")
-        body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\n{raw}"
+        body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\nFailed to parse AI response."
         subprocess.run(
             ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", body],
             check=True,

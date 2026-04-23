@@ -44,8 +44,25 @@ jobs:
           XCTEST=$(find -L "$BIN_PATH" -name "*.xctest" -type d | head -1)
           BIN="${XCTEST}/Contents/MacOS/$(basename "${XCTEST}" .xctest)"
           PROFDATA=$(find -L "$BIN_PATH/codecov" -name "*.profdata" | head -1)
+          # Core-only: IO adapters are thin AX/AppKit wiring, untestable
+          # without a live user session. Architecture enforces Core/IO split
+          # at compile time — all branching logic lives in Core.
           xcrun llvm-cov export -format=lcov "$BIN" -instr-profile="$PROFDATA" \
-            --ignore-filename-regex="(\.build|Tests)" > coverage.lcov
+            --ignore-filename-regex="(\.build|Tests|Sources/ClickToMin/(IO|AppDelegate|DockWatcher))" \
+            > coverage.lcov
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          LINES_FOUND=$(grep -c '^DA:' coverage.lcov || true)
+          LINES_HIT=$(grep '^DA:' coverage.lcov | awk -F, '$2 > 0' | wc -l | tr -d ' ')
+          if [ "$LINES_FOUND" -gt 0 ]; then
+            PCT=$(( LINES_HIT * 100 / LINES_FOUND ))
+          else
+            PCT=0
+          fi
+          echo "percentage=$PCT" >> "$GITHUB_OUTPUT"
+          echo "Coverage: $LINES_HIT / $LINES_FOUND lines = ${PCT}%"
 
       - name: Report coverage on PR
         if: github.event_name == 'pull_request'
@@ -53,6 +70,19 @@ jobs:
         with:
           lcov-file: ./coverage.lcov
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: coverage.json
+          label: coverage
+          message: "${{ steps.coverage.outputs.percentage }}%"
+          valColorRange: ${{ steps.coverage.outputs.percentage }}
+          minColorRange: 50
+          maxColorRange: 100
 
       - name: Upload test results on failure
         if: failure()
