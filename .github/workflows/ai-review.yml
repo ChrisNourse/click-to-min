@@ -21,10 +21,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get Swift diff
+      - name: Get diff
         run: |
           git fetch origin ${{ github.base_ref }}
-          git diff origin/${{ github.base_ref }}...HEAD -- '*.swift' > pr_diff.txt
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
 
       - name: Run AI review
         env:
