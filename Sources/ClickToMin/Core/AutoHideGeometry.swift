@@ -35,17 +35,17 @@ public func adjustFrameForAutoHide(
 ) -> CGRect {
     switch orientation {
     case .bottom:
-        return CGRect(
+        CGRect(
             x: screenFrame.minX, y: screenFrame.minY,
             width: screenFrame.width, height: stripWidth
         ).union(rawFrame)
     case .left:
-        return CGRect(
+        CGRect(
             x: screenFrame.minX, y: screenFrame.minY,
             width: stripWidth, height: screenFrame.height
         ).union(rawFrame)
     case .right:
-        return CGRect(
+        CGRect(
             x: screenFrame.maxX - stripWidth, y: screenFrame.minY,
             width: stripWidth, height: screenFrame.height
         ).union(rawFrame)
