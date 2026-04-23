@@ -1,9 +1,9 @@
 """
 AI code review via OpenRouter (Claude).
 
-Reads pr_diff.txt, sends it to the model, and posts (or replaces) a
-review comment on the PR. Requires environment variables:
-  OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO
+Reads pr_diff.txt (full PR diff, all file types), sends it to the model,
+and posts (or replaces) a review comment on the PR. Requires environment
+variables: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO
 """
 import json
 import os
@@ -16,10 +16,12 @@ MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
 
 SYSTEM_PROMPT = """\
-Senior Swift engineer. Review diff.
+Senior engineer. Review diff for all changed files — Swift, CI workflows, \
+build config, scripts, tests, docs, and any other codebase changes.
 
 Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths, \
-DRY violations, dead/unused code, long-term maintainability risks.
+DRY violations, dead/unused code, long-term maintainability risks, readability problems, \
+CI misconfigurations, missing test coverage for behavioral changes.
 Skip: style, formatting, brace placement — linters own that.
 
 Format: GitHub-flavored markdown."""
@@ -87,10 +89,6 @@ def main() -> None:
 
     with open(DIFF_FILE) as f:
         diff = f.read()
-
-    if not diff.strip():
-        print("No Swift changes in this PR — skipping review.")
-        return
 
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[:MAX_DIFF_CHARS] + "\n\n[diff truncated — showing first 60,000 characters]"
