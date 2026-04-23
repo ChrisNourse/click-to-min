@@ -24,7 +24,7 @@ jobs:
       - name: Get diff
         run: |
           git fetch origin ${{ github.base_ref }}
-          git diff origin/${{ github.base_ref }}...HEAD -- ':!*.png' ':!*.jpg' ':!*.ico' ':!*.icns' ':!*.pdf' ':!*.zip' ':!*.dmg' > pr_diff.txt
+          git diff origin/${{ github.base_ref }}...HEAD -- ':!*.png' ':!*.jpg' ':!*.gif' ':!*.ico' ':!*.icns' ':!*.pdf' ':!*.zip' ':!*.dmg' ':!*.sketch' ':!*.psd' ':!*.mov' ':!*.mp4' > pr_diff.txt
 
       - name: Run AI review
         env:
