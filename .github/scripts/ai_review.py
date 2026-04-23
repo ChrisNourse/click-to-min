@@ -9,6 +9,7 @@ Requires env: OPENROUTER_API_KEY, GH_TOKEN, PR_NUMBER, REPO, EVENT_ACTION
 """
 import json
 import os
+import re
 import subprocess
 import urllib.request
 
@@ -419,7 +420,6 @@ def main() -> None:
 
     # 2. Strip markdown fences (```json ... ```)
     if review is None and "```" in text:
-        import re
         fence_match = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL)
         if fence_match:
             try:
@@ -446,7 +446,7 @@ def main() -> None:
 
     if review is None:
         print(f"JSON parse failed. Raw:\n{raw[:500]}")
-        body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\nNo issues found."
+        body = f"{AI_REVIEW_MARKER}\n### AI Code Review\n\nFailed to parse AI response."
         subprocess.run(
             ["gh", "pr", "comment", pr_number, "--repo", repo, "--body", body],
             check=True,
