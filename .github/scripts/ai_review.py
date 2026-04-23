@@ -28,13 +28,25 @@ DRY violations, dead/unused code, long-term maintainability risks, readability p
 CI misconfigurations, missing test coverage for behavioral changes.
 Skip: style, formatting, brace placement — linters own that.
 
+Quality rules — CRITICAL:
+- Only flag issues you are CERTAIN about. When in doubt, do not comment.
+- NEVER suggest code that is identical to what already exists. Before writing \
+a suggestion, re-read the diff line and verify your replacement actually changes something.
+- Before flagging "dead code", "missing error handling", or "unnecessary fallback", \
+consider whether it is intentional defensive programming.
+- Understand language semantics before flagging ordering issues. Python `and` \
+short-circuits left-to-right; `os.path.exists()` before `os.path.getsize()` is correct.
+- Fewer high-confidence comments are better than many speculative ones.
+- Do NOT invent problems. If the code is correct, return LGTM.
+
 Return a JSON object with two fields:
 - "summary": one-sentence overall assessment
 - "comments": array of objects, each with:
   - "path": file path exactly as shown in diff header (after "b/")
   - "line": line number in NEW file (right side of diff, from + in @@ headers)
   - "body": one-line description: severity, problem, fix
-  - "suggestion": (optional) exact replacement code for that line — only when you have a concrete fix
+  - "suggestion": (optional) exact replacement code for that line — only when you \
+have a concrete fix that DIFFERS from the existing code
 
 Line number rules:
 - Use line numbers from the new file (number after + in @@ hunk headers)
@@ -83,9 +95,15 @@ def call_openrouter(api_key: str, repo: str, user_content: str, system: str) -> 
     return result["choices"][0]["message"]["content"]
 
 
-def parse_diff_valid_lines(diff: str) -> dict[str, set[int]]:
-    """Build set of valid (file, line) pairs from new-file side of diff."""
+def parse_diff(diff: str) -> tuple[dict[str, set[int]], dict[tuple[str, int], str]]:
+    """Parse diff into valid lines and line contents.
+
+    Returns (valid_lines, line_contents) where:
+      valid_lines: {file_path: {line_numbers}} for new-file side
+      line_contents: {(file_path, line_number): content} stripped of diff prefix
+    """
     valid: dict[str, set[int]] = {}
+    contents: dict[tuple[str, int], str] = {}
     current_file = None
     current_line = 0
     for raw in diff.splitlines():
@@ -102,8 +120,10 @@ def parse_diff_valid_lines(diff: str) -> dict[str, set[int]]:
                 pass
             else:
                 valid[current_file].add(current_line)
+                # Store line content without the leading space/+ prefix
+                contents[(current_file, current_line)] = raw[1:] if raw[:1] in ("+", " ") else raw
                 current_line += 1
-    return valid
+    return valid, contents
 
 
 def get_previous_review_threads(repo: str, pr_number: str) -> list[dict]:
@@ -186,7 +206,8 @@ def delete_previous_issue_comments(repo: str, pr_number: str) -> None:
 
 
 def create_review(repo: str, pr_number: str, summary: str,
-                  comments: list[dict], valid_lines: dict[str, set[int]]) -> None:
+                  comments: list[dict], valid_lines: dict[str, set[int]],
+                  line_contents: dict[tuple[str, int], str]) -> None:
     """Create PR review with inline comments via GitHub API."""
     review_comments = []
     skipped = 0
@@ -204,7 +225,13 @@ def create_review(repo: str, pr_number: str, summary: str,
             skipped += 1
             continue
 
+        # Drop suggestions that are identical to existing code
         if suggestion:
+            existing = line_contents.get((path, line), "")
+            if suggestion.strip() == existing.strip():
+                print(f"  skip: {path}:{line} suggestion identical to existing code")
+                skipped += 1
+                continue
             body += f"\n\n```suggestion\n{suggestion}\n```"
 
         review_comments.append({
@@ -342,9 +369,9 @@ def main() -> None:
     # Clean up old v1 issue comments
     delete_previous_issue_comments(repo, pr_number)
 
-    # Validate comment lines against diff
-    valid_lines = parse_diff_valid_lines(diff)
-    create_review(repo, pr_number, summary, comments, valid_lines)
+    # Validate comment lines against diff and filter duplicate suggestions
+    valid_lines, line_contents = parse_diff(diff)
+    create_review(repo, pr_number, summary, comments, valid_lines, line_contents)
 
 
 if __name__ == "__main__":
