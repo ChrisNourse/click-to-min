@@ -12,9 +12,9 @@ public enum BundleURLMatcher {
     /// Returns `true` if both URLs resolve to the same normalized path.
     /// Returns `false` if either URL is nil — Finder, Trash, stacks,
     /// and separators have no bundle URL and should never match.
-    public static func matches(_ a: URL?, _ b: URL?) -> Bool {
-        guard let a, let b else { return false }
-        return normalize(a) == normalize(b)
+    public static func matches(_ lhs: URL?, _ rhs: URL?) -> Bool {
+        guard let lhs, let rhs else { return false }
+        return normalize(lhs) == normalize(rhs)
     }
 
     private static func normalize(_ url: URL) -> URL {

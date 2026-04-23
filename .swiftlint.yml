@@ -34,6 +34,8 @@ opt_in_rules:
 disabled_rules:
   - todo                # TODOs are tracked in issues, not linting
   - trailing_whitespace # handled by SwiftFormat
+  - opening_brace       # SwiftFormat enforces brace placement; these tools conflict on multi-line conditions
+  - force_cast          # AX/CF APIs require as! casts; safe by API contract in all IO adapters
 
 line_length:
   warning: 120
