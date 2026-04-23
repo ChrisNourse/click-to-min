@@ -9,12 +9,11 @@ import Foundation
 /// Does **not** case-fold — case-sensitive volumes must compare exactly.
 /// `/Applications/safari.app` ≠ `/Applications/Safari.app`.
 public enum BundleURLMatcher {
-
     /// Returns `true` if both URLs resolve to the same normalized path.
     /// Returns `false` if either URL is nil — Finder, Trash, stacks,
     /// and separators have no bundle URL and should never match.
     public static func matches(_ a: URL?, _ b: URL?) -> Bool {
-        guard let a = a, let b = b else { return false }
+        guard let a, let b else { return false }
         return normalize(a) == normalize(b)
     }
 

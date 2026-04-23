@@ -7,7 +7,6 @@ import os.log
 /// `kAXMinimizedAttribute` set is asynchronous — the call returns before
 /// the window animates. Do not assert visual state from this call.
 final class WindowMinimizer: WindowMinimizing {
-
     /// Minimizes the focused window of the process identified by `pid`.
     ///
     /// - Parameters:

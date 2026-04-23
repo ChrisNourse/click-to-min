@@ -15,8 +15,7 @@ import os.log
 /// widened to a screen-edge strip along the Dock's configured edge so
 /// the short-circuit still triggers while the Dock is revealed.
 /// Fallback chain if 5pt proves too narrow: 5pt → 10pt → full-edge strip.
-final class AXDockFrameProvider: DockFrameProvider {
-
+final class AXDockFrameProvider: NSObject, DockFrameProvider {
     // MARK: - Dependencies
 
     private let dockPID: () -> pid_t?
@@ -29,7 +28,8 @@ final class AXDockFrameProvider: DockFrameProvider {
 
     private var screenObserver: NSObjectProtocol?
     private var launchObserver: NSObjectProtocol?
-    private var prefObserver: NSObjectProtocol?
+    // prefObserver uses target/selector (not block), so we don't store a
+    // token — removeObserver(self) handles it in deinit.
 
     // MARK: - Init / Deinit
 
@@ -37,6 +37,7 @@ final class AXDockFrameProvider: DockFrameProvider {
     ///   Phase 3 wires this to `DockPIDCache.pid`.
     init(dockPIDProvider: @escaping () -> pid_t?) {
         self.dockPID = dockPIDProvider
+        super.init()
         refreshFrame()
 
         screenObserver = NotificationCenter.default.addObserver(
@@ -57,23 +58,32 @@ final class AXDockFrameProvider: DockFrameProvider {
             self?.refreshFrame()
         }
 
-        prefObserver = DistributedNotificationCenter.default().addObserver(
-            forName: .init("com.apple.dock.prefchanged"),
+        // DistributedNotificationCenter.addObserver(forName:object:queue:using:)
+        // does not accept a suspension-behavior argument; use the
+        // target/selector overload for that. Since prefchanged is rare and
+        // we want immediate delivery, we use the selector form and post
+        // a DispatchQueue.main.async inside the selector.
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleDockPrefChanged(_:)),
+            name: .init("com.apple.dock.prefchanged"),
             object: nil,
             suspensionBehavior: .deliverImmediately
-        ) { [weak self] _ in
-            // Dock prefs changed (resize, move, auto-hide toggle).
-            // Dispatch to main to keep AX calls on the main thread.
-            DispatchQueue.main.async {
-                self?.refreshFrame()
-            }
+        )
+    }
+
+    @objc private func handleDockPrefChanged(_ note: Notification) {
+        // Dock prefs changed (resize, move, auto-hide toggle).
+        // Dispatch to main to keep AX calls on the main thread.
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshFrame()
         }
     }
 
     deinit {
         if let t = screenObserver { NotificationCenter.default.removeObserver(t) }
         if let t = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(t) }
-        if let t = prefObserver { DistributedNotificationCenter.default().removeObserver(t) }
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     // MARK: - DockFrameProvider conformance
@@ -107,7 +117,7 @@ final class AXDockFrameProvider: DockFrameProvider {
 
         os_log("dock frame refreshed: %{public}@",
                log: Log.lifecycle, type: .info,
-               cachedFrame.map { NSStringFromRect(NSRect($0)) } ?? "nil")
+               cachedFrame.map { NSStringFromRect($0) } ?? "nil")
     }
 
     /// Finds the Dock's AXList element and returns its frame, or falls
@@ -116,14 +126,16 @@ final class AXDockFrameProvider: DockFrameProvider {
         // Walk the Dock app's children to find the AXList.
         var childrenRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(dockApp, kAXChildrenAttribute as CFString, &childrenRef) == .success,
-              let children = childrenRef as? [AXUIElement] else {
+              let children = childrenRef as? [AXUIElement]
+        else {
             return nil
         }
 
         for child in children {
             var roleRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef) == .success,
-                  let role = roleRef as? String, role == "AXList" else {
+                  let role = roleRef as? String, role == "AXList"
+            else {
                 continue
             }
 
@@ -135,7 +147,8 @@ final class AXDockFrameProvider: DockFrameProvider {
             // Fallback: union of child item frames.
             var itemChildrenRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &itemChildrenRef) == .success,
-                  let items = itemChildrenRef as? [AXUIElement] else {
+                  let items = itemChildrenRef as? [AXUIElement]
+            else {
                 continue
             }
 
@@ -155,13 +168,15 @@ final class AXDockFrameProvider: DockFrameProvider {
         var posRef: CFTypeRef?
         var sizeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posRef) == .success,
-              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success else {
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success
+        else {
             return nil
         }
         var point = CGPoint.zero
         var size = CGSize.zero
         guard AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
-              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else {
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+        else {
             return nil
         }
         return CGRect(origin: point, size: size)

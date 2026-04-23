@@ -24,7 +24,7 @@ final class CallLog {
 // MARK: - Fakes
 
 /// DockFrameProvider is `AnyObject`-constrained, so this must be a class.
-final class FakeDockFrameProvider: DockFrameProvider {
+final class LoggingFakeDockFrameProvider: DockFrameProvider {
     let log: CallLog
     var stubbedFrame: CGRect?
 
@@ -142,7 +142,7 @@ private let dockPid: pid_t = 99
 final class DockWatcherPipelineTests: XCTestCase {
 
     private var log: CallLog!
-    private var dockFrame: FakeDockFrameProvider!
+    private var dockFrame: LoggingFakeDockFrameProvider!
     private var hitTester: FakeHitTester!
     private var dockPIDProvider: FakeDockPIDProviding!
     private var minimizer: FakeWindowMinimizer!
@@ -153,7 +153,7 @@ final class DockWatcherPipelineTests: XCTestCase {
     override func setUp() {
         super.setUp()
         log = CallLog()
-        dockFrame = FakeDockFrameProvider(log: log, frame: bottomDockRect)
+        dockFrame = LoggingFakeDockFrameProvider(log: log, frame: bottomDockRect)
         hitTester = FakeHitTester(log: log)
         dockPIDProvider = FakeDockPIDProviding(log: log, pid: dockPid)
         minimizer = FakeWindowMinimizer(log: log)

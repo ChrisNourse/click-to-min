@@ -1,7 +1,8 @@
-import Foundation
 import CoreGraphics
+import Foundation
 
 // MARK: - Test-facing protocols for DockWatcher pipeline
+
 //
 // These live in ClickToMinCore so the coordinator (Phase 3) can be
 // tested with in-memory fakes that don't require AppKit, AX, or a

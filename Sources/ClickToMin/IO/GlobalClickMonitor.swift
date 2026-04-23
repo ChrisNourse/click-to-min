@@ -16,7 +16,6 @@ import os.log
 ///   no windows).
 /// - Does not fire while the screen is locked.
 final class GlobalClickMonitor {
-
     private var monitor: Any?
 
     /// Begins monitoring global left-mouse-down events.

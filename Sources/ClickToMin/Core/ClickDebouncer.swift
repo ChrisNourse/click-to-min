@@ -23,7 +23,8 @@ public final class ClickDebouncer {
     private var lastAllowed: [String: Date] = [:]
 
     public init(window: TimeInterval = ClickDebouncer.debounceInterval,
-                now: @escaping () -> Date = { Date() }) {
+                now: @escaping () -> Date = { Date() })
+    {
         self.window = window
         self.now = now
     }

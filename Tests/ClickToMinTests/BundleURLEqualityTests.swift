@@ -45,11 +45,14 @@ final class BundleURLEqualityTests: XCTestCase {
 
     // MARK: - Case-sensitive (no case folding)
 
-    /// `/Applications/safari.app` ≠ `/Applications/Safari.app`.
-    /// On case-sensitive volumes this is a real distinction.
+    /// `/nonexistent/safari.app` ≠ `/nonexistent/Safari.app`.
+    /// Uses a path that does not exist on disk so the case distinction
+    /// survives normalization. On APFS (case-insensitive-case-preserving)
+    /// `resolvingSymlinksInPath()` would canonicalize cased variants of a
+    /// real path to the same on-disk form, which defeats the intent.
     func testCaseSensitive_doesNotMatch() {
-        let a = URL(fileURLWithPath: "/Applications/safari.app")
-        let b = URL(fileURLWithPath: "/Applications/Safari.app")
+        let a = URL(fileURLWithPath: "/nonexistent-click-to-min/safari.app")
+        let b = URL(fileURLWithPath: "/nonexistent-click-to-min/Safari.app")
         XCTAssertFalse(BundleURLMatcher.matches(a, b))
     }
 

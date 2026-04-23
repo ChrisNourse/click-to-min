@@ -9,7 +9,6 @@ import os.log
 /// a dying Dock PID after a Dock restart is acceptable — the PID check
 /// simply fails for one click.
 final class DockPIDCache: DockPIDProviding {
-
     /// O(1) stored read.
     private(set) var pid: pid_t?
 
@@ -54,13 +53,13 @@ final class DockPIDCache: DockPIDProviding {
         let best = candidates.max { a, b in
             switch (a.launchDate, b.launchDate) {
             case (nil, .some):
-                return true   // prefer b (non-nil date)
+                true // prefer b (non-nil date)
             case (.some, nil):
-                return false  // prefer a (non-nil date)
+                false // prefer a (non-nil date)
             case let (.some(da), .some(db)):
-                return da < db  // prefer later date
+                da < db // prefer later date
             case (nil, nil):
-                return false  // arbitrary stable order
+                false // arbitrary stable order
             }
         }
 
