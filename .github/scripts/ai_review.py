@@ -176,7 +176,8 @@ def get_previous_review_threads(repo: str, pr_number: str) -> list[dict]:
         if not comments:
             continue
         first = comments[0]
-        if first.get("author", {}).get("login") != "github-actions[bot]":
+        author = first.get("author", {}).get("login", "")
+        if author not in ("github-actions[bot]", "github-actions"):
             continue
         threads.append({
             "isResolved": node["isResolved"],
