@@ -68,6 +68,11 @@ final class AXHitTester: HitTesting {
     /// only — returns nil and lets the pipeline fail gracefully.
     func dockItemURL(_ element: AnyObject) -> URL? {
         let axElement = element as! AXUIElement
+
+        // DIAGNOSTIC: log the element tree from hit upward so we can see
+        // what roles/attrs the Dock actually exposes on this macOS.
+        logAXChain(axElement)
+
         guard let dockItem = walkToDockItem(from: axElement) else { return nil }
 
         // Filter out non-actionable subroles.
@@ -84,10 +89,8 @@ final class AXHitTester: HitTesting {
             }
         }
 
-        // Primary: kAXURLAttribute
-        if let urlString = axStringAttribute(dockItem, kAXURLAttribute as CFString),
-           let url = URL(string: urlString)
-        {
+        // Primary: kAXURLAttribute (may be CFString or CFURL depending on macOS).
+        if let url = axURLAttribute(dockItem, kAXURLAttribute as CFString) {
             return url
         }
 
@@ -101,18 +104,13 @@ final class AXHitTester: HitTesting {
     // MARK: - Private helpers
 
     /// Walks kAXParentAttribute from `element` upward, looking for an
-    /// element whose AXRole is "AXDockItem". Returns nil if none found
-    /// (e.g., long-press preview children that aren't inside a dock item).
+    /// element whose AXRole is "AXDockItem" or whose subrole indicates
+    /// a dock item (e.g., "AXApplicationDockItem" on some macOS versions
+    /// where the subrole appears on elements with a different role).
     private func walkToDockItem(from element: AXUIElement) -> AXUIElement? {
+        if isDockItem(element) { return element }
+
         var current = element
-
-        // Check the element itself first.
-        if axStringAttribute(current, kAXRoleAttribute as CFString) == "AXDockItem" {
-            return current
-        }
-
-        // Walk up. Limit iterations to avoid infinite loops on malformed
-        // hierarchies.
         for _ in 0 ..< 20 {
             var parentRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(
@@ -120,15 +118,72 @@ final class AXHitTester: HitTesting {
             ) == .success, let parent = parentRef else {
                 return nil
             }
-            // parentRef is an AXUIElement (CF type).
             let parentElement = parent as! AXUIElement
-            if axStringAttribute(parentElement, kAXRoleAttribute as CFString) == "AXDockItem" {
-                return parentElement
-            }
+            if isDockItem(parentElement) { return parentElement }
             current = parentElement
         }
-
         return nil
+    }
+
+    private func isDockItem(_ element: AXUIElement) -> Bool {
+        if axStringAttribute(element, kAXRoleAttribute as CFString) == "AXDockItem" {
+            return true
+        }
+        // Some Sonoma+ builds expose the AXDockItem role only on the
+        // container and the subrole on a nested "application" wrapper.
+        if let subrole = axStringAttribute(element, kAXSubroleAttribute as CFString),
+           subrole.hasSuffix("DockItem")
+        {
+            return true
+        }
+        return false
+    }
+
+    /// Reads an attribute that may be exposed as either a CFString or CFURL.
+    private func axURLAttribute(_ element: AXUIElement, _ attribute: CFString) -> URL? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &ref) == .success,
+              let value = ref else { return nil }
+        // CFURL?
+        if CFGetTypeID(value) == CFURLGetTypeID() {
+            return (value as! CFURL) as URL
+        }
+        // CFString?
+        if let s = value as? String {
+            return URL(string: s)
+        }
+        return nil
+    }
+
+    /// DIAGNOSTIC: logs the AX element and its parent chain (role,
+    /// subrole, title, URL). Temporary; remove once dock hit-testing
+    /// is proven stable.
+    private func logAXChain(_ element: AXUIElement) {
+        var current: AXUIElement? = element
+        for depth in 0 ..< 6 {
+            guard let e = current else { break }
+            let role = axStringAttribute(e, kAXRoleAttribute as CFString) ?? "?"
+            let subrole = axStringAttribute(e, kAXSubroleAttribute as CFString) ?? "-"
+            let title = axStringAttribute(e, kAXTitleAttribute as CFString) ?? "-"
+            let urlString: String
+            if let url = axURLAttribute(e, kAXURLAttribute as CFString) {
+                urlString = url.absoluteString
+            } else {
+                urlString = "-"
+            }
+            os_log("ax chain[%d]: role=%{public}@ subrole=%{public}@ title=%{public}@ url=%{public}@",
+                   log: Log.pipeline, type: .info,
+                   depth, role, subrole, title, urlString)
+
+            var parentRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(e, kAXParentAttribute as CFString, &parentRef) == .success,
+               let parent = parentRef
+            {
+                current = (parent as! AXUIElement)
+            } else {
+                current = nil
+            }
+        }
     }
 
     private func axStringAttribute(_ element: AXUIElement, _ attribute: CFString) -> String? {
