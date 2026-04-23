@@ -165,12 +165,7 @@ final class AXHitTester: HitTesting {
             let role = axStringAttribute(e, kAXRoleAttribute as CFString) ?? "?"
             let subrole = axStringAttribute(e, kAXSubroleAttribute as CFString) ?? "-"
             let title = axStringAttribute(e, kAXTitleAttribute as CFString) ?? "-"
-            let urlString: String
-            if let url = axURLAttribute(e, kAXURLAttribute as CFString) {
-                urlString = url.absoluteString
-            } else {
-                urlString = "-"
-            }
+            let urlString = axURLAttribute(e, kAXURLAttribute as CFString)?.absoluteString ?? "-"
             os_log("ax chain[%d]: role=%{public}@ subrole=%{public}@ title=%{public}@ url=%{public}@",
                    log: Log.pipeline, type: .info,
                    depth, role, subrole, title, urlString)
