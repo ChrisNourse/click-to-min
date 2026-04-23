@@ -12,7 +12,7 @@ import urllib.request
 
 DIFF_FILE = "pr_diff.txt"
 MAX_DIFF_CHARS = 60_000
-MODEL = "anthropic/claude-3-opus"
+MODEL = "anthropic/claude-opus-4"
 
 SYSTEM_PROMPT = """\
 You are a senior Swift engineer performing a focused code review on a macOS app.
