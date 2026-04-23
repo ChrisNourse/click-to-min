@@ -1,8 +1,16 @@
 # CLAUDE.md — click-to-min
 
+## Communication style
+
+Be terse. No filler. No praise. No preamble. Fragments OK. Short synonyms.
+Drop articles (a/an/the) when meaning stays clear. Lead with action or answer.
+One line per issue when reviewing code: `file:line severity problem. fix.`
+
+This applies everywhere: commit messages, PR comments, code review, chat.
+
 ## Behaviour
 
-No preamble. No "Great question!" Fix thing. Do it. Open PR.
+Fix thing. Do it. Open PR.
 
 CI fail → read logs, find root cause, fix. Don't summarise failure back — user see it.
 

@@ -11,34 +11,41 @@ import subprocess
 import urllib.request
 
 DIFF_FILE = "pr_diff.txt"
+CLAUDE_MD = "CLAUDE.md"
 MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
 
 SYSTEM_PROMPT = """\
-Senior Swift engineer. Review diff. Terse. No filler. No praise.
+Senior Swift engineer. Review diff.
 
-Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths, DRY violations, dead/unused code, long-term maintainability risks.
+Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths, \
+DRY violations, dead/unused code, long-term maintainability risks.
 Skip: style, formatting, brace placement — linters own that.
 
-Project conventions (don't flag these as issues):
-- `as!` force casts in IO adapters are intentional. AX/CF types (AXUIElement, AXValue, \
-CFBoolean, CFURL) can't use conditional Swift casts. Safe by API contract.
-- Allman brace style on multi-line conditions is enforced by SwiftFormat. Expected.
-- `os_log` with Log.lifecycle/Log.pipeline categories. No print().
-- Branching logic belongs in Core/ClickPipeline.swift only. IO adapters = dumb wiring.
-- Core/ target has no AppKit/ApplicationServices — build error if you add them.
+Format: GitHub-flavored markdown."""
 
-Format: GitHub-flavored markdown. One line per issue: file:line severity problem. fix."""
+
+def load_claude_md() -> str:
+    """Load CLAUDE.md for project conventions and communication style."""
+    if os.path.exists(CLAUDE_MD):
+        with open(CLAUDE_MD) as f:
+            return f.read()
+    return ""
 
 
 def call_openrouter(api_key: str, repo: str, diff: str) -> str:
+    claude_md = load_claude_md()
+    system = SYSTEM_PROMPT
+    if claude_md:
+        system += f"\n\nProject conventions and style (from CLAUDE.md):\n\n{claude_md}"
+
     payload = {
         "model": MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {
                 "role": "user",
-                "content": f"Please review this diff:\n\n```diff\n{diff}\n```",
+                "content": f"Review this diff:\n\n```diff\n{diff}\n```",
             },
         ],
     }
