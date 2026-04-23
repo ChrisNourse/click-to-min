@@ -75,18 +75,11 @@ final class AXHitTester: HitTesting {
 
         guard let dockItem = walkToDockItem(from: axElement) else { return nil }
 
-        // Filter out non-actionable subroles.
-        if let subrole = axStringAttribute(dockItem, kAXSubroleAttribute as CFString) {
-            let excluded: Set = [
-                "AXSeparatorDockItem",
-                "AXFolderDockItem",
-                "AXTrashDockItem",
-                "AXMinimizedWindowDockItem",
-                "AXDesktopDockItem"
-            ]
-            if excluded.contains(subrole) {
-                return nil
-            }
+        // Filter out non-actionable subroles (set lives in Core).
+        if DockItemClassification.isExcluded(
+            subrole: axStringAttribute(dockItem, kAXSubroleAttribute as CFString)
+        ) {
+            return nil
         }
 
         // Primary: kAXURLAttribute (may be CFString or CFURL depending on macOS).
@@ -126,17 +119,10 @@ final class AXHitTester: HitTesting {
     }
 
     private func isDockItem(_ element: AXUIElement) -> Bool {
-        if axStringAttribute(element, kAXRoleAttribute as CFString) == "AXDockItem" {
-            return true
-        }
-        // Some Sonoma+ builds expose the AXDockItem role only on the
-        // container and the subrole on a nested "application" wrapper.
-        if let subrole = axStringAttribute(element, kAXSubroleAttribute as CFString),
-           subrole.hasSuffix("DockItem")
-        {
-            return true
-        }
-        return false
+        DockItemClassification.isDockItem(
+            role: axStringAttribute(element, kAXRoleAttribute as CFString),
+            subrole: axStringAttribute(element, kAXSubroleAttribute as CFString)
+        )
     }
 
     /// Reads an attribute that may be exposed as either a CFString or CFURL.

@@ -6,6 +6,7 @@
   <a href="../../actions/workflows/ci.yml">
     <img src="../../actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/coverage-gist-id/raw/coverage.json" alt="coverage"/>
   <img src="https://img.shields.io/badge/macOS-13%2B-lightgrey" alt="macOS 13+"/>
   <img src="https://img.shields.io/badge/Swift-5.9-orange" alt="Swift 5.9"/>
   <img src="https://img.shields.io/badge/version-0.1.0--wip-blue" alt="v0.1.0 WIP"/>
@@ -110,7 +111,7 @@ GlobalClickMonitor  (CGEventTap, session-wide)
    └─ WindowMinimizer       set AXMinimized = true on the key window
 ```
 
-**49 unit tests**, zero live AX calls required.
+**100% Core coverage**, zero live AX calls required.
 
 ## Development
 

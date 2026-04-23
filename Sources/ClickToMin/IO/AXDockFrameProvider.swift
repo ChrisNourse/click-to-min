@@ -184,15 +184,10 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
 
     // MARK: - Auto-hide widening
 
-    /// If the Dock is set to auto-hide, widens `rawFrame` to a screen-edge
-    /// strip so the short-circuit still triggers while the Dock is being
-    /// revealed by a mouse hover.
-    ///
-    /// Fallback chain (increase if 5pt proves too narrow in testing):
-    ///   5pt → 10pt → full-edge strip along the Dock's configured edge.
-    /// Full-edge strip widens the false-positive region slightly —
-    /// acceptable since all it costs is one extra AX hit-test per edge
-    /// click while the Dock is hidden.
+    /// If the Dock is set to auto-hide, delegates to
+    /// `adjustFrameForAutoHide` (Core) to widen the frame to a
+    /// screen-edge strip. Reads auto-hide and orientation from
+    /// `com.apple.dock` preferences.
     private func adjustForAutoHide(_ rawFrame: CGRect?) -> CGRect? {
         guard let raw = rawFrame else { return nil }
 
@@ -203,49 +198,18 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
 
         guard autoHide else { return raw }
 
-        // Determine which edge the Dock is on.
-        let orientation = dockOrientation()
+        let orientation = DockOrientation(
+            rawPreference: CFPreferencesCopyAppValue(
+                "orientation" as CFString,
+                "com.apple.dock" as CFString
+            ) as? String
+        )
         guard let screen = NSScreen.screens.first else { return raw }
-        let screenFrame = screen.frame
 
-        // 5pt screen-edge strip along the Dock's configured edge.
-        // 5 → 10 → full-edge fallback chain — start at 5.
-        let stripWidth: CGFloat = 5
-
-        switch orientation {
-        case .bottom:
-            let minY = screenFrame.minY
-            return CGRect(x: screenFrame.minX, y: minY,
-                          width: screenFrame.width, height: stripWidth)
-                .union(raw)
-        case .left:
-            let minX = screenFrame.minX
-            return CGRect(x: minX, y: screenFrame.minY,
-                          width: stripWidth, height: screenFrame.height)
-                .union(raw)
-        case .right:
-            let maxX = screenFrame.maxX - stripWidth
-            return CGRect(x: maxX, y: screenFrame.minY,
-                          width: stripWidth, height: screenFrame.height)
-                .union(raw)
-        }
-    }
-
-    private enum DockOrientation {
-        case bottom, left, right
-    }
-
-    private func dockOrientation() -> DockOrientation {
-        guard let raw = CFPreferencesCopyAppValue(
-            "orientation" as CFString,
-            "com.apple.dock" as CFString
-        ) as? String else {
-            return .bottom
-        }
-        switch raw {
-        case "left": return .left
-        case "right": return .right
-        default: return .bottom
-        }
+        return adjustFrameForAutoHide(
+            rawFrame: raw,
+            orientation: orientation,
+            screenFrame: screen.frame
+        )
     }
 }

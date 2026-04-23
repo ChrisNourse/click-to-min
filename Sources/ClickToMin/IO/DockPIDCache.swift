@@ -39,31 +39,19 @@ final class DockPIDCache: DockPIDProviding {
     // MARK: - Private
 
     /// Queries `NSRunningApplication.runningApplications` for the Dock.
-    ///
-    /// Multi-match tie-break (during Dock relaunch, both old and new
-    /// instances can appear transiently):
-    ///   1. Never cache a terminated instance.
-    ///   2. Prefer the instance with the latest `launchDate`.
-    ///   3. If `launchDate` is nil for one, prefer the non-nil.
+    /// Tie-break logic lives in `selectBestDockProcess` (Core).
     private func refresh() {
         let candidates = NSRunningApplication.runningApplications(
             withBundleIdentifier: Self.dockBundleID
-        ).filter { !$0.isTerminated }
-
-        let best = candidates.max { lhs, rhs in
-            switch (lhs.launchDate, rhs.launchDate) {
-            case (nil, .some):
-                true // prefer rhs (non-nil date)
-            case (.some, nil):
-                false // prefer lhs (non-nil date)
-            case let (.some(da), .some(db)):
-                da < db // prefer later date
-            case (nil, nil):
-                false // arbitrary stable order
-            }
+        ).map {
+            DockProcessCandidate(
+                processIdentifier: $0.processIdentifier,
+                isTerminated: $0.isTerminated,
+                launchDate: $0.launchDate
+            )
         }
 
-        pid = best?.processIdentifier
+        pid = selectBestDockProcess(candidates)
 
         os_log("dock PID refreshed: %{public}d",
                log: Log.lifecycle, type: .info,
