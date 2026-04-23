@@ -93,6 +93,10 @@ def main() -> None:
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[:MAX_DIFF_CHARS] + "\n\n[diff truncated — showing first 60,000 characters]"
 
+    if not diff.strip():
+        print("No reviewable changes (binary files only?).")
+        return
+
     print(f"Sending {len(diff):,} chars to {MODEL}...")
     review = call_openrouter(api_key, repo, diff)
 
