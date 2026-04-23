@@ -149,8 +149,8 @@ final class AXHitTester: HitTesting {
             return (value as! CFURL) as URL
         }
         // CFString?
-        if let str = value as? String {
-            return URL(string: str)
+        if let s = value as? String {
+            return URL(string: s)
         }
         return nil
     }
@@ -161,17 +161,17 @@ final class AXHitTester: HitTesting {
     private func logAXChain(_ element: AXUIElement) {
         var current: AXUIElement? = element
         for depth in 0 ..< 6 {
-            guard let elem = current else { break }
-            let role = axStringAttribute(elem, kAXRoleAttribute as CFString) ?? "?"
-            let subrole = axStringAttribute(elem, kAXSubroleAttribute as CFString) ?? "-"
-            let title = axStringAttribute(elem, kAXTitleAttribute as CFString) ?? "-"
-            let urlString = axURLAttribute(elem, kAXURLAttribute as CFString)?.absoluteString ?? "-"
+            guard let e = current else { break }
+            let role = axStringAttribute(e, kAXRoleAttribute as CFString) ?? "?"
+            let subrole = axStringAttribute(e, kAXSubroleAttribute as CFString) ?? "-"
+            let title = axStringAttribute(e, kAXTitleAttribute as CFString) ?? "-"
+            let urlString = axURLAttribute(e, kAXURLAttribute as CFString)?.absoluteString ?? "-"
             os_log("ax chain[%d]: role=%{public}@ subrole=%{public}@ title=%{public}@ url=%{public}@",
                    log: Log.pipeline, type: .info,
                    depth, role, subrole, title, urlString)
 
             var parentRef: CFTypeRef?
-            if AXUIElementCopyAttributeValue(elem, kAXParentAttribute as CFString, &parentRef) == .success,
+            if AXUIElementCopyAttributeValue(e, kAXParentAttribute as CFString, &parentRef) == .success,
                let parent = parentRef
             {
                 current = (parent as! AXUIElement)

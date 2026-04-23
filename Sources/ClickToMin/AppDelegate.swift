@@ -48,8 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         dockWatcher?.stop()
-        if let observer = wakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        if let t = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(t)
         }
     }
 
