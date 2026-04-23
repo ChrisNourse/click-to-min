@@ -13,11 +13,10 @@ CI fail → read logs, find root cause, fix. Don't summarise failure back — us
 ```bash
 swift build -c debug
 swift test --parallel
-swiftformat Sources           # fix in-place
-swiftformat Sources --lint    # check only
-swiftlint lint --strict --config .swiftlint.yml Sources
 ./build.sh                    # assemble ClickToMin.app
 ```
+
+SwiftFormat + SwiftLint run in CI. Don't run manually.
 
 Runner pin `macos-14` (arm64). Intentional. Don't change to `macos-latest`.
 
