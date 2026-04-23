@@ -15,6 +15,8 @@ jobs:
     # Runner pin: macos-14 (Sonoma, arm64). Do not use macos-latest — toolchain
     # drift silently breaks builds. Re-pin deliberately when upgrading.
     runs-on: macos-14
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +35,24 @@ jobs:
       - name: Build (debug)
         run: swift build -c debug
 
-      - name: Test
-        run: swift test --parallel
+      - name: Test (with coverage)
+        run: swift test --parallel --enable-code-coverage
+
+      - name: Generate coverage report
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST=$(find -L "$BIN_PATH" -name "*.xctest" -type d | head -1)
+          BIN="${XCTEST}/Contents/MacOS/$(basename "${XCTEST}" .xctest)"
+          PROFDATA=$(find -L "$BIN_PATH/codecov" -name "*.profdata" | head -1)
+          xcrun llvm-cov export -format=lcov "$BIN" -instr-profile="$PROFDATA" \
+            --ignore-filename-regex="(\.build|Tests)" > coverage.lcov
+
+      - name: Report coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.4.0
+        with:
+          lcov-file: ./coverage.lcov
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test results on failure
         if: failure()
@@ -85,11 +103,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install swiftformat
-        run: brew install swiftformat
+      - name: Install swiftformat + swiftlint
+        run: brew install swiftformat swiftlint
 
-      - name: Lint
+      - name: Format lint
         # Only lint Sources. Tests intentionally use patterns (force
         # unwraps in XCTest helpers, deliberate import ordering to put
         # @testable imports last) that conflict with SwiftFormat defaults.
         run: swiftformat Sources --lint
+
+      - name: SwiftLint
+        run: swiftlint lint --strict --config .swiftlint.yml Sources
