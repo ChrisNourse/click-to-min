@@ -25,6 +25,8 @@ mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BIN_PATH" "$BUNDLE/Contents/MacOS/$APP_NAME"
 cp Resources/Info.plist "$BUNDLE/Contents/Info.plist"
 cp Resources/AppIcon.icns "$BUNDLE/Contents/Resources/AppIcon.icns"
+cp Resources/menubar-icon.png "$BUNDLE/Contents/Resources/menubar-icon.png"
+cp "Resources/menubar-icon@2x.png" "$BUNDLE/Contents/Resources/menubar-icon@2x.png"
 
 plutil -lint "$BUNDLE/Contents/Info.plist"
 

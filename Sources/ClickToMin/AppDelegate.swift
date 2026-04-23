@@ -58,10 +58,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = NSImage(
-                systemSymbolName: "arrow.down.to.line",
-                accessibilityDescription: "ClickToMin"
-            )
+            if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                image.isTemplate = true
+                button.image = image
+            } else {
+                // Fallback for unbundled `swift run` launches.
+                button.image = NSImage(
+                    systemSymbolName: "arrow.down.to.line",
+                    accessibilityDescription: "ClickToMin"
+                )
+            }
         }
 
         let menu = NSMenu()
