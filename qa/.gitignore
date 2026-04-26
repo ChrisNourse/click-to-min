@@ -1,0 +1,5 @@
+reports/*
+!reports/.gitkeep
+harness/AXProbe/.build/
+harness/AXProbe/.swiftpm/
+harness/AXProbe/Package.resolved

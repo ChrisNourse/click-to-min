@@ -1,0 +1,46 @@
+{
+  "_comment": "Moderate policy thresholds for ClickToMin performance badges. Thresholds are inclusive on the lower bound: value < green_max -> green; green_max <= value < orange_max -> orange; value >= orange_max -> red. Tune by editing this file and committing.",
+  "schema_version": 1,
+  "metrics": {
+    "startup_ms": {
+      "label": "startup",
+      "unit": "ms",
+      "green_max": 1000,
+      "orange_max": 2000,
+      "direction": "lower_is_better"
+    },
+    "memory_mb": {
+      "label": "memory",
+      "unit": "MB",
+      "green_max": 40,
+      "orange_max": 80,
+      "direction": "lower_is_better"
+    },
+    "idle_cpu_wakeups_per_sec": {
+      "label": "idle-cpu",
+      "unit": "wakeups/s",
+      "green_max": 1,
+      "orange_max": 10,
+      "direction": "lower_is_better"
+    },
+    "active_cpu_tap_overhead_us_p50": {
+      "label": "active-cpu",
+      "unit": "\u00b5s",
+      "green_max": 100,
+      "orange_max": 500,
+      "direction": "lower_is_better"
+    },
+    "latency_ms_p50": {
+      "label": "latency",
+      "unit": "ms",
+      "green_max": 250,
+      "orange_max": 500,
+      "direction": "lower_is_better"
+    }
+  },
+  "regression_guard": {
+    "_comment": "A run fails the perf gate if any metric regresses beyond these multipliers vs the previous green run in history.jsonl.",
+    "warn_multiplier": 1.25,
+    "fail_multiplier": 1.5
+  }
+}
