@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import os.log
 
 /// Global left-mouse-down listener implemented as a listen-only
@@ -97,12 +98,37 @@ final class GlobalClickMonitor {
     /// system disables it (timeout / user input), otherwise forwards
     /// the click location to `callback` on the main thread in NSEvent
     /// (bottom-left) coordinates.
+    ///
+    /// Emits `tap_overhead_ns=<N>` os_log at `.info` so qa/05 can compute
+    /// active-cpu cost per click (elapsed ns between tap-callback entry
+    /// and async dispatch to the main thread).
     private func handleTapEvent(type: CGEventType, event: CGEvent) {
+        let tapEntryTime = mach_absolute_time()
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
         }
         guard type == .leftMouseDown else { return }
+
+        // PLAN.md scope: Ctrl-click and Cmd-click on Dock items are reserved
+        // for the macOS contextual / secondary behaviors and must NOT trigger
+        // minimize. `CGEventTap` with mask `leftMouseDown` still delivers these
+        // because ctrl+left-click is technically a left-mouse-down with a
+        // modifier flag set. Filter them out here.
+        //
+        // We mask to ONLY the modifier-key bits before testing: `event.flags`
+        // also carries ambient bits like `.maskNonCoalesced`, `.maskNumericPad`,
+        // and `.maskSecondaryFn` on synthetic clicks which must not gate the
+        // tap. Using `.contains` against `.maskControl` on the raw value is
+        // safe in principle, but we log the rawValue at debug level to make
+        // incidental bit regressions diagnosable.
+        let flags = event.flags
+        let modifierMask: CGEventFlags = [.maskControl, .maskCommand]
+        if !flags.intersection(modifierMask).isEmpty {
+            os_log("pipeline: drop at modifier (flags=0x%{public}x)",
+                   log: Log.pipeline, type: .info, flags.rawValue)
+            return
+        }
 
         // CGEvent location is top-left origin, anchored on the primary
         // display. Convert to NSEvent's bottom-left space using the
@@ -111,6 +137,16 @@ final class GlobalClickMonitor {
         let cgPoint = event.location
         let primaryHeight = CGFloat(CGDisplayPixelsHigh(CGMainDisplayID()))
         let nsPoint = CGPoint(x: cgPoint.x, y: primaryHeight - cgPoint.y)
+
+        // Active-cpu metric: elapsed ns from tap-callback entry to async
+        // dispatch. Emitted at .info so qa/05-perf-instruments.sh can parse
+        // `tap_overhead_ns=<N>` lines via `log show --info --debug`.
+        let tapExitTime = mach_absolute_time()
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let elapsedNs = (tapExitTime - tapEntryTime) &* UInt64(timebase.numer) / UInt64(timebase.denom)
+        os_log("pipeline: tap_overhead_ns=%llu",
+               log: Log.pipeline, type: .info, elapsedNs)
 
         let cb = callback
         DispatchQueue.main.async {
