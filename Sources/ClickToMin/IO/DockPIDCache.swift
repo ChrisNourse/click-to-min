@@ -13,6 +13,7 @@ final class DockPIDCache: DockPIDProviding {
     private(set) var pid: pid_t?
 
     private var launchObserver: NSObjectProtocol?
+    private var pollTimer: Timer?
 
     private static let dockBundleID = "com.apple.dock"
 
@@ -28,12 +29,23 @@ final class DockPIDCache: DockPIDProviding {
                   app.bundleIdentifier == Self.dockBundleID else { return }
             self?.refresh()
         }
+
+        // Poll fallback: some Dock restarts (notably those triggered by
+        // toggling `autohide`) do not deliver `didLaunchApplicationNotification`
+        // reliably. A 2s NSRunningApplication re-query catches those cases
+        // so click validation doesn't silently use a dead Dock PID.
+        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.refreshIfChanged()
+        }
+        pollTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     deinit {
         if let observer = launchObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+        pollTimer?.invalidate()
     }
 
     // MARK: - Private
@@ -56,5 +68,26 @@ final class DockPIDCache: DockPIDProviding {
         os_log("dock PID refreshed: %{public}d",
                log: Log.lifecycle, type: .info,
                pid.map { Int32($0) } ?? -1)
+    }
+
+    /// Refresh only if the live Dock PID differs from cached, to keep the
+    /// log quiet. Called by the 2s poll fallback.
+    private func refreshIfChanged() {
+        let candidates = NSRunningApplication.runningApplications(
+            withBundleIdentifier: Self.dockBundleID
+        ).map {
+            DockProcessCandidate(
+                processIdentifier: $0.processIdentifier,
+                isTerminated: $0.isTerminated,
+                launchDate: $0.launchDate
+            )
+        }
+        let live = selectBestDockProcess(candidates)
+        if live != pid {
+            pid = live
+            os_log("dock PID refreshed (poll): %{public}d",
+                   log: Log.lifecycle, type: .info,
+                   live.map { Int32($0) } ?? -1)
+        }
     }
 }

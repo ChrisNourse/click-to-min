@@ -31,6 +31,17 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
     // prefObserver uses target/selector (not block), so we don't store a
     // token — removeObserver(self) handles it in deinit.
 
+    // MARK: - Dock PID poller
+
+    /// Some Dock-restart causes (notably toggling `autohide`) do not
+    /// reliably deliver either `didLaunchApplicationNotification` for
+    /// `com.apple.dock` nor the `com.apple.dock.prefchanged` distributed
+    /// notification, and may not change `screen.visibleFrame` within the
+    /// settle window. Polling the Dock's PID every 2s and refreshing on
+    /// change is a cheap, robust fallback that catches every restart.
+    private var pidPollTimer: Timer?
+    private var lastKnownPid: pid_t?
+
     // MARK: - Init / Deinit
 
     /// - Parameter dockPIDProvider: Closure returning the Dock's PID.
@@ -45,6 +56,7 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            os_log("observer: screen params changed", log: Log.lifecycle, type: .info)
             self?.refreshFrame()
         }
 
@@ -53,8 +65,11 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
             object: nil,
             queue: .main
         ) { [weak self] note in
-            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == "com.apple.dock" else { return }
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            os_log("observer: didLaunch bid=%{public}@",
+                   log: Log.lifecycle, type: .info,
+                   app.bundleIdentifier ?? "<nil>")
+            guard app.bundleIdentifier == "com.apple.dock" else { return }
             self?.refreshFrame()
         }
 
@@ -70,11 +85,45 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
             object: nil,
             suspensionBehavior: .deliverImmediately
         )
+
+        // Dock-PID-change poll (fallback for missed notifications,
+        // specifically autohide toggles where neither didLaunch nor
+        // prefchanged fires reliably and visibleFrame doesn't update).
+        // Queries NSRunningApplication directly rather than the cached
+        // dockPIDProvider, because the cache depends on the same
+        // didLaunchApplicationNotification that this fallback exists to
+        // compensate for.
+        lastKnownPid = Self.liveDockPID()
+        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let currentPid = Self.liveDockPID()
+            if currentPid != self.lastKnownPid {
+                os_log("observer: dock pid changed %{public}d -> %{public}d",
+                       log: Log.lifecycle, type: .info,
+                       Int(self.lastKnownPid ?? -1), Int(currentPid ?? -1))
+                self.lastKnownPid = currentPid
+                self.refreshFrame()
+            }
+        }
+        pidPollTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// Live Dock PID query (bypasses any cache). Mirrors
+    /// `DockPIDCache.refresh()` so both layers agree on tie-breaking.
+    private static func liveDockPID() -> pid_t? {
+        let apps = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.apple.dock"
+        ).filter { !$0.isTerminated }
+        return apps.sorted { a, b in
+            (a.launchDate ?? .distantPast) > (b.launchDate ?? .distantPast)
+        }.first?.processIdentifier
     }
 
     @objc private func handleDockPrefChanged(_ note: Notification) {
         // Dock prefs changed (resize, move, auto-hide toggle).
         // Dispatch to main to keep AX calls on the main thread.
+        os_log("observer: dock prefchanged", log: Log.lifecycle, type: .info)
         DispatchQueue.main.async { [weak self] in
             self?.refreshFrame()
         }
@@ -84,6 +133,7 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
         if let observer = screenObserver { NotificationCenter.default.removeObserver(observer) }
         if let observer = launchObserver { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         DistributedNotificationCenter.default().removeObserver(self)
+        pidPollTimer?.invalidate()
     }
 
     // MARK: - DockFrameProvider conformance
