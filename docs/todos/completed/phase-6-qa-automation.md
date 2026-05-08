@@ -1,14 +1,14 @@
 # Phase 6 — QA Automation Suite
 
-**Goal**: Replace the manual Layer 2 / Layer 3 checklist from the original `phase-6-qa-perf.md` (archived under `completed/`) with a repeatable, scripted test suite. Must produce a markdown report per run and auto-populate `PERF.md` with current-release baselines.
+**Goal**: Replace the manual Layer 2 / Layer 3 checklist from the original `phase-6-qa-perf.md` (archived under `completed/`) with a repeatable, scripted test suite. Must produce a markdown report per run and persist per-run metrics to `qa/metrics/history.jsonl` so regressions can be gated automatically.
 
 **Parallelism**: 6a and the AX harness block everything else. 6b, 6c, 6d, 6e can land independently once 6a is in. 6f is the last piece (orchestrator + reporter) and closes the phase.
 
 **Exit criteria**:
 - `./qa/run-all.sh` runs end-to-end on a maintainer workstation and emits `qa/reports/<timestamp>.md` with pass/fail per suite
-- `PERF.md` v0.1.0 row is populated from a real run (memory MB, idle CPU %, click→minimize latency ms)
+- `qa/metrics/history.jsonl` has a populated row for v0.1.0 (startup ms, memory MB, idle CPU wakeups/s, active CPU tap-overhead µs, click→minimize latency ms), with shields.io JSON badges rendered under `qa/metrics/badges/`
 - README documents: `brew install cliclick`, grant Accessibility to the harness binary, run `./qa/run-all.sh`
-- CI runs the CI-safe subset (build + bundle + plist lint) automatically; the AX-dependent suites remain local-only and are documented as such
+- CI runs the CI-safe subset (build + bundle + plist lint + 01-smoke) automatically; the AX-dependent suites remain local-only and are documented as such
 
 **Scope limits (non-automatable, accepted)**:
 - First-grant Accessibility flow (TCC is SIP-protected; can't script a grant)
@@ -147,22 +147,22 @@
   - Initials + date appended to `qa/MANUAL-CHECKLIST.md` on each release
 - **Notes**: If the maintainer has no external display, the hot-plug item is marked N/A with a note — not skipped silently.
 
-### T-6.9 — `qa/run-all.sh` orchestrator + report writer + PERF.md integration
+### T-6.9 — `qa/run-all.sh` orchestrator + report writer + metrics integration
 - **Owner**: unassigned
 - **Depends on**: T-6.3–T-6.7
 - **Blocks**: release
-- **Files**: `qa/run-all.sh`, `qa/lib/report.sh`, updates `PERF.md`, updates `README.md`
-- **Description**: Top-level runner. Executes suites in order, captures pass/fail + timing per suite, writes `qa/reports/<YYYY-MM-DD-HHMMSS>.md`, and updates the `Current` column of `PERF.md` in place. On a `--baseline` flag, also updates the `Baseline` column (used once, at v0.1.0 release).
+- **Files**: `qa/run-all.sh`, `qa/lib/report.sh`, `qa/lib/metrics.sh`, `qa/metrics/thresholds.json`, `qa/metrics/history.jsonl`, updates `README.md`
+- **Description**: Top-level runner. Executes suites in order, captures pass/fail + timing per suite, writes `qa/reports/<YYYY-MM-DD-HHMMSS>.md`, appends a row to `qa/metrics/history.jsonl`, renders shields.io JSON badges under `qa/metrics/badges/`, and gates regressions against the most recent green row in history. On `--ci`, runs only the hosted-runner-safe subset (01-smoke) and skips the interactive AX gate.
 - **Acceptance criteria**:
   - [x] `./qa/run-all.sh` runs all CI-safe + AX-dependent suites in sequence
-  - [x] `./qa/run-all.sh --ci` runs only the CI-safe subset (suite 01) and exits cleanly on a non-grantable runner
-  - [x] `./qa/run-all.sh --baseline` writes both the Baseline and Current columns of `PERF.md`
+  - [x] `./qa/run-all.sh --ci` runs only the CI-safe subset (suite 01) and exits cleanly on a non-grantable runner (skips the AX gate)
+  - [x] Each run appends a `{ts, git_sha, metrics: {...}}` row to `qa/metrics/history.jsonl`; badges are rendered against `qa/metrics/thresholds.json`
   - [x] Report file is a clean markdown table, one row per suite, with links to per-suite logs in `qa/reports/<timestamp>/`
-  - [x] Regression guard: if any `PERF.md` Current value regresses >20% vs. Baseline, exit code 1 and the report header is flagged `REGRESSION`
+  - [x] Regression guard: if any metric regresses past the `fail_multiplier` in `thresholds.json` vs. the previous green row, exit code 1 and the report header is flagged `REGRESSION`
   - [x] README gets a new "Running the QA suite" section pointing at `qa/run-all.sh` and listing prereqs
 - **Verification step**:
-  - `./qa/run-all.sh --baseline` on a clean release build: report marked `PASS`, `PERF.md` populated, Baseline and Current columns equal
-- **Notes**: Wire the CI-safe subset into `.github/workflows/ci.yml` as a new `qa-smoke` job that runs after `bundle-check`.
+  - `./qa/run-all.sh` on a clean release build: report marked `PASS`, history row appended, badges rendered green
+- **Notes**: CI-safe subset is wired into `.github/workflows/ci.yml` as the `qa-smoke` job that runs after `bundle-check` and also invokes `./qa/run-all.sh --ci` on the hosted runner.
 
 ---
 
@@ -172,7 +172,7 @@
 - [x] AXProbe binary not granted Accessibility — every suite fails identically; add a preflight check in `common.sh` that runs `AXIsProcessTrusted()` via AXProbe and prints the grant path if missing
 - [x] Dock config suite does not restore state on failure — leaves maintainer's Dock mangled; verify the `trap EXIT` restore path by intentionally failing a sub-case
 - [x] `xctrace` parser hard-codes column indices — Xcode upgrade silently breaks perf numbers; enforce column-name assertion
-- [x] Perf regression >20% merged without release-notes mention — `run-all.sh --baseline` flag must be explicit, not default, so accidental re-baselining can't hide a regression
+- [x] Perf regression past the fail-multiplier merged without release-notes mention — `qa::metrics_regression_guard` fails the run (exit 1) and flags the report header `REGRESSION`, so a regressed run can't silently pass
 - [x] CI-safe suite confused with full suite — clearly label in output which subset ran
 
 ## Completed

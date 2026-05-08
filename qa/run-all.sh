@@ -74,7 +74,15 @@ qa::step $((++STEP)) "$TOTAL_STEPS" "Build AXProbe harness"
 qa::build_axprobe
 
 qa::step $((++STEP)) "$TOTAL_STEPS" "Accessibility permission gate"
-qa::require_accessibility
+# CI-subset mode only runs 01-smoke, which is designed to pass without AX
+# grant (the "permission missing, polling started" signpost is an accepted
+# outcome). Skip the interactive gate so CI doesn't hang 10min on an
+# ungrantable hosted runner.
+if [[ "$MODE" == "CI-SUBSET" ]]; then
+    qa::info "CI-SUBSET mode: skipping interactive AX gate"
+else
+    qa::require_accessibility
+fi
 
 qa::report_begin "$REPORT_MD" "$MODE"
 

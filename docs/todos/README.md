@@ -6,14 +6,13 @@ Source of truth: [`../../PLAN.md`](../../PLAN.md).
 
 | Phase | File | Status |
 |-------|------|--------|
-| 6 — QA automation | [phase-6-qa-automation.md](phase-6-qa-automation.md) | in progress |
-| 7 — Inline menu settings | [phase-7-settings.md](phase-7-settings.md) | complete |
-| 8 — Homebrew cask distribution | [phase-8-brew-distribution.md](phase-8-brew-distribution.md) | complete |
-| 9 — Persistent self-signed codesign in CI | [phase-9-persistent-codesign.md](phase-9-persistent-codesign.md) | complete |
+| — — signing setup streamlining | [signing-streamlining.md](signing-streamlining.md) | open, unscheduled |
+
+No in-flight implementation phases. See [`completed/`](completed/) for the full history.
 
 ## Completed phases (archived)
 
-Phases 0 through 5 are archived under [`completed/`](completed/).
+Phases 0 through 9 are archived under [`completed/`](completed/).
 
 | Archived file | What it covered |
 |---------------|-----------------|
@@ -23,6 +22,11 @@ Phases 0 through 5 are archived under [`completed/`](completed/).
 | [completed/phase-3-coordinator-app.md](completed/phase-3-coordinator-app.md) | `DockWatcher` coordinator + pipeline tests + `AppDelegate` |
 | [completed/phase-4-packaging.md](completed/phase-4-packaging.md) | `Info.plist`, `build.sh`, launch smoke |
 | [completed/phase-5-cicd.md](completed/phase-5-cicd.md) | GitHub Actions CI + release workflow + `.swiftformat` + branch protection |
+| [completed/phase-6-qa-perf.md](completed/phase-6-qa-perf.md) | Original manual Layer 2 + Layer 3 checklist — superseded by phase-6-qa-automation.md |
+| [completed/phase-6-qa-automation.md](completed/phase-6-qa-automation.md) | Scripted QA suite (00..05), orchestrator, metrics pipeline, badges, `qa-smoke` CI job |
+| [phase-7-settings.md](phase-7-settings.md) | Inline menu settings |
+| [phase-8-brew-distribution.md](phase-8-brew-distribution.md) | Homebrew cask distribution |
+| [phase-9-persistent-codesign.md](phase-9-persistent-codesign.md) | Persistent self-signed codesign in CI |
 
 ## Task Spec Format
 
