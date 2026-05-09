@@ -75,3 +75,43 @@ Commit: `type: short summary`. Body optional.
 Green before merge: `build-test`, `lint`, `bundle-check`. CodeQL pending = ok.
 
 Squash-merge.
+
+---
+
+## AI Code Review
+
+Senior engineer review. All changed files — Swift, CI, scripts, tests, docs.
+
+### Flag
+- Correctness bugs, logic errors, memory/retain issues, silent failure paths.
+- DRY violations — duplicated logic that should be extracted.
+- YAGNI violations — speculative code with no current caller.
+- KISS violations — over-engineered solutions; simpler alternative exists.
+- Dead/unused code — unreachable paths, unused imports, orphan helpers.
+- Long-term maintainability risks, readability problems.
+- CI misconfigurations, missing test coverage for behavioral changes.
+
+### Skip
+Style, formatting, brace placement — linters own that.
+
+### Quality rules
+- Only flag issues you are CERTAIN about. When in doubt, do not comment.
+- NEVER suggest code identical to what already exists. Re-read the diff line first.
+- Before flagging "dead code" or "unnecessary fallback", consider intentional defensive programming.
+- Understand language semantics before flagging ordering issues (e.g. Python `and` short-circuits).
+- Fewer high-confidence comments > many speculative ones.
+- If code is correct, return LGTM.
+
+### Output format
+JSON object:
+- `summary`: one-sentence overall assessment
+- `comments`: array of `{path, line, body, suggestion?}`
+  - `path`: file path from diff header (after `b/`)
+  - `line`: line number in new file (right side of diff)
+  - `body`: one-line — severity, problem, fix
+  - `suggestion`: (optional) exact replacement that DIFFERS from existing code
+- `thread_replies`: array of `{thread_id, body}`
+
+Line rules: only comment on + or context lines. Never deleted lines.
+No issues → `{"summary": "LGTM", "comments": [], "thread_replies": []}`.
+Return ONLY valid JSON. No markdown fences. No text outside JSON.
