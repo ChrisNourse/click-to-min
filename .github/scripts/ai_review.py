@@ -301,6 +301,8 @@ def create_review(repo: str, pr_number: str, summary: str,
 def main() -> None:
     api_key = os.environ["OPENROUTER_API_KEY"]
     pr_number = os.environ["PR_NUMBER"]
+    pr_title = os.environ.get("PR_TITLE", "")
+    pr_body = os.environ.get("PR_BODY", "")
     repo = os.environ["REPO"]
     event_action = os.environ.get("EVENT_ACTION", "opened")
 
@@ -334,7 +336,7 @@ def main() -> None:
 
     # Build user prompt
     label = "incremental " if is_followup else ""
-    user_content = f"Review this {label}diff:\n\n```diff\n{diff}\n```"
+    user_content = f"PR title: {pr_title}\nPR description: {pr_body or '(empty)'}\n\nReview this {label}diff:\n\n```diff\n{diff}\n```"
 
     # Add previous review context for follow-ups
     previous = []

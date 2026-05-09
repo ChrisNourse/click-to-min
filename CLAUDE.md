@@ -90,6 +90,7 @@ Senior engineer review. All changed files — Swift, CI, scripts, tests, docs.
 - Dead/unused code — unreachable paths, unused imports, orphan helpers.
 - Long-term maintainability risks, readability problems.
 - CI misconfigurations, missing test coverage for behavioral changes.
+- Weak/misleading PR description — if summary doesn't match actual changes, flag it.
 
 ### Skip
 Style, formatting, brace placement — linters own that.
