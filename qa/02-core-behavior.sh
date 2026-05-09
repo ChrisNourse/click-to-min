@@ -100,7 +100,7 @@ cliclick "c:$CLICK_X,$CLICK_Y"
 # especially after a full minimize. `is-minimized` returns
 # "no focused window" mid-animation because the window isn't yet focused.
 MIN="minimized=unknown"
-for _ in $(seq 1 20); do
+for _ in $(seq 1 40); do
     sleep 0.1
     MIN="$("$AXPROBE" is-minimized "$APP_BID" 2>/dev/null || echo minimized=unknown)"
     [[ "$MIN" == "minimized=false" ]] && break

@@ -56,7 +56,7 @@ qa::info "mode=$MODE report=$REPORT_MD"
 #   FULL:      toolchain + build axprobe + ax gate + 6 suites (00..05)
 #              + metrics record + regression guard + badge publish          = 12
 if [[ "$MODE" == "FULL" ]]; then
-    TOTAL_STEPS=12
+    TOTAL_STEPS=13
 else
     TOTAL_STEPS=4
 fi
@@ -126,6 +126,7 @@ if [[ "$MODE" == "FULL" ]]; then
     if ! run_suite 03-edge-cases.sh    "Edge cases: frozen/debounce/multi-window"; then OVERALL="FAIL"; fi
     if ! run_suite 04-dock-config.sh   "Dock config: tilesize/orientation/autohide"; then OVERALL="FAIL"; fi
     if ! run_suite 05-perf-instruments.sh "Perf: xctrace + idle-cpu + active-cpu"; then OVERALL="FAIL"; fi
+    if ! run_suite 06-settings.sh "Settings: enable/disable + icon-hide toggles"; then OVERALL="FAIL"; fi
 
     # --- Metrics pipeline: aggregate, record, classify, publish ------------
     qa::step $((++STEP)) "$TOTAL_STEPS" "Recording perf metrics"
