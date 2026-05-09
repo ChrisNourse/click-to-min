@@ -2,7 +2,7 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
     branches: [main]
 
 concurrency:
@@ -10,8 +10,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pr-description:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check PR description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          body=$(echo "$PR_BODY" | sed '/^[[:space:]]*$/d' | sed '/^<!--.*-->$/d')
+          char_count=${#body}
+          if [ "$char_count" -lt 20 ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "❌ **PR description required.** Write 1-3 sentences: what changed + why. Then re-push or edit the description to re-run this check."
+            echo "::error::PR description is empty or too short (${char_count} chars, need 20+)."
+            exit 1
+          fi
+
   review:
     runs-on: ubuntu-latest
+    if: github.event.action != 'edited'
     permissions:
       contents: read
       pull-requests: write
@@ -40,6 +61,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           REPO: ${{ github.repository }}
           EVENT_ACTION: ${{ github.event.action }}
         run: python3 .github/scripts/ai_review.py
