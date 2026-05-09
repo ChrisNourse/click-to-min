@@ -1,5 +1,5 @@
-import Foundation
 import ClickToMinCore
+import Foundation
 
 extension Notification.Name {
     static let settingsChanged = Notification.Name("com.click-to-min.settingsChanged")
@@ -13,7 +13,7 @@ final class UserDefaultsSettings: SettingsStore {
         defaults.register(defaults: [
             SettingsKeys.enabled: true,
             SettingsKeys.iconHidden: false,
-            SettingsKeys.hideAcknowledged: false,
+            SettingsKeys.hideAcknowledged: false
         ])
     }
 

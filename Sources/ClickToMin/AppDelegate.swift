@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var wakeObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var reopenObserver: NSObjectProtocol?
-    private let settings: UserDefaultsSettings = UserDefaultsSettings()
+    private let settings = UserDefaultsSettings()
 
     private var statusReflectsMissingPermission = false
 
