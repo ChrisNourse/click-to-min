@@ -62,9 +62,10 @@ jobs:
           osascript -e 'tell application "TextEdit" to activate'
           sleep 1
           echo "Frontmost: $("$AXPROBE" frontmost-bundle-id)"
-          # Launch ClickToMin with --test-click
-          open ClickToMin.app --args --test-click "$CX,$CY"
-          echo "Launched ClickToMin with --test-click $CX,$CY"
+          # Launch ClickToMin with --test-click directly via binary
+          ./ClickToMin.app/Contents/MacOS/ClickToMin --test-click "$CX,$CY" &
+          CTMID=$!
+          echo "Launched ClickToMin (PID $CTMID) with --test-click $CX,$CY"
           # Wait for minimize (1s app delay + processing)
           if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 5; then
             echo "SUCCESS: Window minimized via --test-click!"
