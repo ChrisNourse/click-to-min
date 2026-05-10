@@ -124,7 +124,7 @@ final class GlobalClickMonitor {
         // incidental bit regressions diagnosable.
         let flags = event.flags
         let modifierMask: CGEventFlags = [.maskControl, .maskCommand]
-        if !flags.intersection(modifierMask).isEmpty {
+        if !flags.isDisjoint(with: modifierMask) {
             os_log("pipeline: drop at modifier (flags=0x%{public}x)",
                    log: Log.pipeline, type: .info, flags.rawValue)
             return

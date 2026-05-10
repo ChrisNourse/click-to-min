@@ -115,9 +115,9 @@ final class AXDockFrameProvider: NSObject, DockFrameProvider {
         let apps = NSRunningApplication.runningApplications(
             withBundleIdentifier: "com.apple.dock"
         ).filter { !$0.isTerminated }
-        return apps.sorted { a, b in
-            (a.launchDate ?? .distantPast) > (b.launchDate ?? .distantPast)
-        }.first?.processIdentifier
+        return apps.max(by: { lhs, rhs in
+            (lhs.launchDate ?? .distantPast) < (rhs.launchDate ?? .distantPast)
+        })?.processIdentifier
     }
 
     @objc private func handleDockPrefChanged(_ note: Notification) {
