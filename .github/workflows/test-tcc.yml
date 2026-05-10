@@ -49,13 +49,13 @@ jobs:
 
       - name: Verify AXIsProcessTrusted for ClickToMin
         run: |
-          # Quick sanity: run the binary momentarily and check if it logs "permission granted"
           sudo killall tccd 2>/dev/null || true
           sleep 1
-          timeout 5 ./ClickToMin.app/Contents/MacOS/ClickToMin &
+          ./ClickToMin.app/Contents/MacOS/ClickToMin &
           sleep 3
-          log show --last 4s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | grep -i "permission\|granted\|missing\|pipeline\|DockWatcher\|test-click" || echo "No relevant logs found"
+          log show --last 4s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | grep -i "permission\|granted\|missing\|pipeline\|DockWatcher\|test-click\|app launched" || echo "No relevant logs found"
           pkill -x ClickToMin 2>/dev/null || true
+          sleep 1
 
       - name: Test --test-click pipeline
         timeout-minutes: 1
