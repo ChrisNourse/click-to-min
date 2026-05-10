@@ -1,4 +1,4 @@
-name: Update Perf Badges
+name: Update Badges
 
 on:
   workflow_run:
@@ -7,57 +7,85 @@ on:
     branches: [main]
 
 jobs:
-  update-perf-badges:
+  update-badges:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Render and push QA perf badges from history.jsonl
+      - name: Push perf badges + QA staleness badge
         env:
           CLICKTOMIN_BADGE_GIST_ID: ${{ vars.QA_BADGE_GIST_ID }}
           CLICKTOMIN_BADGE_GIST_TOKEN: ${{ secrets.GIST_SECRET }}
         run: |
           python3 - <<'PY'
-          import json, os, sys, urllib.request
-          hist_path = "qa/metrics/history.jsonl"
-          thresh_path = "qa/metrics/thresholds.json"
+          import json, os, sys, subprocess, urllib.request
+
           gist_id = os.environ.get("CLICKTOMIN_BADGE_GIST_ID", "")
           token = os.environ.get("CLICKTOMIN_BADGE_GIST_TOKEN", "")
           if not gist_id or not token:
               print("Badge env vars not set — skipping")
               sys.exit(0)
+
+          hist_path = "qa/metrics/history.jsonl"
+          thresh_path = "qa/metrics/thresholds.json"
+
+          files = {}
+
+          # --- Perf badges from history.jsonl ---
           try:
               with open(hist_path) as f:
                   lines = [json.loads(l) for l in f if l.strip()]
           except FileNotFoundError:
-              print("No history.jsonl — skipping")
-              sys.exit(0)
-          if not lines:
-              print("Empty history — skipping")
-              sys.exit(0)
-          latest = lines[-1]["metrics"]
-          with open(thresh_path) as f:
-              t = json.load(f)
-          files = {}
-          for key, meta in t["metrics"].items():
-              v = latest.get(key)
-              if v is None:
-                  continue
-              v = float(v)
-              if v < meta["green_max"]:
-                  color = "brightgreen"
-              elif v < meta["orange_max"]:
-                  color = "orange"
-              else:
-                  color = "red"
-              msg = f"{int(v)} {meta['unit']}" if v == int(v) else f"{v:.2f} {meta['unit']}"
-              payload = {"schemaVersion": 1, "label": meta["label"], "message": msg.strip(), "color": color}
-              files[f"{key}.json"] = {"content": json.dumps(payload)}
-              print(f"  {meta['label']}: {msg.strip()} ({color})")
+              lines = []
+
+          if lines:
+              latest_metrics = lines[-1]["metrics"]
+              with open(thresh_path) as f:
+                  t = json.load(f)
+              for key, meta in t["metrics"].items():
+                  v = latest_metrics.get(key)
+                  if v is None:
+                      continue
+                  v = float(v)
+                  if v < meta["green_max"]:
+                      color = "brightgreen"
+                  elif v < meta["orange_max"]:
+                      color = "orange"
+                  else:
+                      color = "red"
+                  msg = f"{int(v)} {meta['unit']}" if v == int(v) else f"{v:.2f} {meta['unit']}"
+                  payload = {"schemaVersion": 1, "label": meta["label"], "message": msg.strip(), "color": color}
+                  files[f"{key}.json"] = {"content": json.dumps(payload)}
+                  print(f"  {meta['label']}: {msg.strip()} ({color})")
+
+          # --- QA staleness badge: compare Gist tested_sha vs main HEAD ---
+          head_sha = subprocess.check_output(
+              ["git", "rev-parse", "--short", "HEAD"], text=True
+          ).strip()
+
+          try:
+              qa_url = f"https://gist.githubusercontent.com/raw/{gist_id}/qa-status.json"
+              with urllib.request.urlopen(qa_url, timeout=10) as resp:
+                  qa_status = json.loads(resp.read())
+              tested_sha = qa_status.get("tested_sha", "")
+          except Exception:
+              tested_sha = ""
+
+          if tested_sha == head_sha:
+              staleness = {"schemaVersion": 1, "label": "QA", "message": f"current ({tested_sha})", "color": "brightgreen"}
+          elif tested_sha:
+              staleness = {"schemaVersion": 1, "label": "QA", "message": f"stale (tested {tested_sha}, main is {head_sha})", "color": "orange"}
+          else:
+              staleness = {"schemaVersion": 1, "label": "QA", "message": "no report", "color": "red"}
+
+          files["qa-staleness.json"] = {"content": json.dumps(staleness)}
+          print(f"  QA staleness: {staleness['message']} ({staleness['color']})")
+
           if not files:
-              print("No metrics to push")
+              print("No badges to push")
               sys.exit(0)
+
           req = urllib.request.Request(
               f"https://api.github.com/gists/{gist_id}",
               data=json.dumps({"files": files}).encode(),

@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeReopenNotification()
 
         checkPermissionAndMaybeStart()
+        handleTestClickArgument()
 
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
@@ -71,6 +72,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.iconHidden = false
         }
         return false
+    }
+
+    // MARK: - CI test injection
+
+    private func handleTestClickArgument() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let idx = args.firstIndex(of: "--test-click"),
+              idx + 1 < args.count else { return }
+        let parts = args[idx + 1].split(separator: ",")
+        guard parts.count == 2,
+              let xVal = Double(parts[0]),
+              let yVal = Double(parts[1]) else { return }
+        let point = CGPoint(x: xVal, y: yVal)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let watcher = self?.dockWatcher else {
+                os_log("--test-click: no DockWatcher (permission missing?)",
+                       log: Log.lifecycle, type: .error)
+                return
+            }
+            watcher.injectTestClick(at: point)
+            os_log("--test-click: dispatched at (%{public}.1f, %{public}.1f)",
+                   log: Log.lifecycle, type: .info, point.x, point.y)
+        }
     }
 
     // MARK: - Status bar

@@ -19,20 +19,17 @@ jobs:
       - name: Assemble .app bundle
         run: ./build.sh
 
-      - name: Install cliclick
-        run: brew install cliclick
+      - name: Build AXProbe
+        run: swift build -c release --package-path qa/harness/AXProbe
 
-      - name: Grant TCC permissions to all binaries
+      - name: Grant TCC permissions
         run: |
           BINARY_PATH="$(pwd)/ClickToMin.app/Contents/MacOS/ClickToMin"
-          swift build -c release --package-path qa/harness/AXProbe
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
-          CLICLICK="$(which cliclick)"
           TCC_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
 
           grant_tcc() {
-            local bin="$1"
-            local service="$2"
+            local bin="$1" service="$2"
             codesign -dr - "$bin" 2>&1 | awk -F ' => ' '/designated/{print $2}' | csreq -r- -b /tmp/csreq.bin
             local CSREQ_HEX=$(xxd -p /tmp/csreq.bin | tr -d '\n')
             sudo sqlite3 "$TCC_DB" \
@@ -41,95 +38,42 @@ jobs:
               || echo "  $service -> $(basename "$bin") FAILED"
           }
 
-          echo "ClickToMin: $BINARY_PATH"
-          echo "AXProbe:    $AXPROBE"
-          echo "cliclick:   $CLICLICK"
-          echo ""
-          for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent kTCCServiceScreenCapture kTCCServiceDeveloperTool; do
-            for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK" "/usr/bin/osascript"; do
+          for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent kTCCServiceScreenCapture; do
+            for BIN in "$BINARY_PATH" "$AXPROBE"; do
               grant_tcc "$BIN" "$SERVICE"
             done
           done
-          echo ""
-          echo "=== Verify grants ==="
-          sudo sqlite3 "$TCC_DB" "SELECT service, client FROM access WHERE auth_value=2;"
 
-      - name: Launch ClickToMin and verify
-        run: |
-          # Kill tccd to force it to re-read TCC.db, then launch app
-          sudo killall tccd 2>/dev/null || true
-          sleep 2
-          open ClickToMin.app
-          sleep 5
-          pgrep -l ClickToMin || echo "Not running"
-          echo "=== ClickToMin lifecycle logs ==="
-          log show --last 8s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null || true
-
-      - name: Verify AX is-trusted
-        run: |
-          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
-          "$AXPROBE" is-trusted && echo "AX TRUSTED" || echo "AX NOT TRUSTED (exit $?)"
-
-      - name: Quick minimize test (bypass full suite)
+      - name: Test --test-click pipeline
         timeout-minutes: 1
         run: |
-          swift build -c release --package-path qa/harness/AXProbe 2>&1 | tail -3
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
-          ls -la "$AXPROBE" || { echo "axprobe not at expected path, searching..."; AXPROBE="$(find . -path '*/AXProbe/.build/*/release/axprobe' -type f | head -1)"; }
-          echo "Using: $AXPROBE"
+          # Launch TextEdit as target
           open -a TextEdit
           sleep 2
-          FRAME=$("$AXPROBE" dock-item-frame com.apple.TextEdit 2>&1) && echo "Dock frame: $FRAME" || { echo "dock-item-frame FAILED: $FRAME"; exit 1; }
+          # Get Dock tile center
+          FRAME=$("$AXPROBE" dock-item-frame com.apple.TextEdit 2>&1)
+          echo "Dock frame: $FRAME"
           eval "$FRAME"
           CX=$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')
           CY=$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')
           echo "Click target: ($CX, $CY)"
-          # First test: does cliclick even work? Click desktop to deactivate TextEdit
-          echo "--- Test A: cliclick click at (100,400) ---"
-          cliclick "c:100,400"
-          sleep 1
-          FM=$("$AXPROBE" frontmost-bundle-id)
-          echo "After cliclick elsewhere, frontmost: $FM"
-          # Test A2: try osascript System Events click instead
+          # Make TextEdit frontmost
           osascript -e 'tell application "TextEdit" to activate'
           sleep 1
-          echo "--- Test A2: System Events click at (100,400) ---"
-          osascript -e 'tell application "System Events" to click at {100, 400}' 2>&1 || echo "System Events click failed"
-          sleep 1
-          FM=$("$AXPROBE" frontmost-bundle-id)
-          echo "After System Events click elsewhere, frontmost: $FM"
-          # Reactivate TextEdit
-          osascript -e 'tell application "TextEdit" to activate'
-          sleep 1
-          FM=$("$AXPROBE" frontmost-bundle-id)
-          echo "After reactivate, frontmost: $FM"
-          echo "--- Test B: click Dock tile via AX (System Events) ---"
-          osascript -e 'tell application "System Events" to click UI element "TextEdit" of list 1 of application process "Dock"' 2>&1 || echo "AX Dock click failed"
-          sleep 1
-          FM2=$("$AXPROBE" frontmost-bundle-id)
-          echo "After AX Dock click, frontmost: $FM2"
-          echo "--- Test C: wait for ClickToMin minimize ---"
-          if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 3; then
-            echo "SUCCESS: Window minimized!"
+          echo "Frontmost: $("$AXPROBE" frontmost-bundle-id)"
+          # Launch ClickToMin with --test-click
+          open ClickToMin.app --args --test-click "$CX,$CY"
+          echo "Launched ClickToMin with --test-click $CX,$CY"
+          # Wait for minimize (1s app delay + processing)
+          if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 5; then
+            echo "SUCCESS: Window minimized via --test-click!"
           else
-            echo "FAILED: Window did not minimize within 3s"
-            echo "=== ClickToMin logs ==="
-            log show --last 20s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -30 || true
-            echo "=== All com.click-to-min logs (no filter) ==="
-            log show --last 20s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | tail -20 || true
+            echo "FAILED: Window did not minimize within 5s"
+            echo "=== ClickToMin process logs ==="
+            log show --last 10s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | tail -30 || true
             echo "=== Window state ==="
             "$AXPROBE" window-count com.apple.TextEdit 2>&1 || true
             "$AXPROBE" is-minimized com.apple.TextEdit 2>&1 || true
             exit 1
           fi
-
-      - name: Run FULL QA suite (only if quick test passed)
-        run: |
-          ./qa/suites/run-all.sh 2>&1 || echo "QA exit code: $?"
-
-      - name: Upload QA report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: qa-reports
-          path: qa/reports

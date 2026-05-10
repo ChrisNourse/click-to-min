@@ -234,12 +234,14 @@ PY
 # Push all rendered badge JSONs to a GitHub Gist. Requires:
 #   CLICKTOMIN_BADGE_GIST_ID   — gist ID (once, bootstrap via qa/metrics/README.md)
 #   CLICKTOMIN_BADGE_GIST_TOKEN — PAT with `gist` scope
-# Skipped silently if either env var is missing (CI-friendly).
+# Skipped silently if either env var is missing. Devs do not need this token —
+# QA attestation is handled by qa-attest.yml (triggered via gh CLI at end of
+# run-all.sh). This function is only for optional perf badge publishing.
 qa::metrics_push_gist() {
     local gist_id="${CLICKTOMIN_BADGE_GIST_ID:-${QA_BADGE_GIST_ID:-}}"
     local gist_token="${CLICKTOMIN_BADGE_GIST_TOKEN:-${GIST_SECRET:-}}"
     if [[ -z "$gist_id" || -z "$gist_token" ]]; then
-        qa::info "[metrics] gist env vars not set — skipping badge push"
+        qa::info "[metrics] gist env vars not set — skipping badge push (perf badges only)"
         return 0
     fi
     if [[ ! -d "$QA_METRICS_BADGES_DIR" ]]; then
@@ -247,7 +249,7 @@ qa::metrics_push_gist() {
         return 0
     fi
     CLICKTOMIN_BADGE_GIST_ID="$gist_id" CLICKTOMIN_BADGE_GIST_TOKEN="$gist_token" \
-    /usr/bin/python3 - "$QA_METRICS_BADGES_DIR" <<PY
+    /usr/bin/python3 - "$QA_METRICS_BADGES_DIR" <<'PY'
 import json, os, sys, urllib.request
 badges_dir = sys.argv[1]
 gist_id = os.environ["CLICKTOMIN_BADGE_GIST_ID"]

@@ -14,6 +14,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify QA covers this release
+        env:
+          QA_BADGE_GIST_ID: ${{ vars.QA_BADGE_GIST_ID }}
+        run: |
+          if [[ -z "${QA_BADGE_GIST_ID:-}" ]]; then
+            echo "::error::QA_BADGE_GIST_ID not configured — cannot verify QA status"
+            exit 1
+          fi
+          TAG_SHA="$(git rev-parse --short HEAD)"
+          QA_JSON="$(curl -sf "https://gist.githubusercontent.com/raw/${QA_BADGE_GIST_ID}/qa-status.json" || true)"
+          if [[ -z "$QA_JSON" ]]; then
+            echo "::error::Could not fetch qa-status.json from Gist — has QA ever been run?"
+            exit 1
+          fi
+          QA_SHA="$(echo "$QA_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['tested_sha'])")"
+          echo "Tag SHA:    $TAG_SHA"
+          echo "QA SHA:     $QA_SHA"
+          if [[ "$QA_SHA" != "$TAG_SHA" ]]; then
+            echo "::error::Release blocked — QA tested $QA_SHA but releasing $TAG_SHA. Run full QA on this commit first."
+            exit 1
+          fi
+          echo "✓ QA verified for $TAG_SHA"
+
       # pinned 2026-04-22, Xcode versions on this runner: 15.2, 15.3, 15.4 (source: https://github.com/actions/runner-images)
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app

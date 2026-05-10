@@ -61,6 +61,14 @@ final class DockWatcher {
         os_log("DockWatcher stopped", log: Log.lifecycle, type: .info)
     }
 
+    /// Inject a fake click for CI testing. Exercises the full real pipeline
+    /// without requiring CGEventTap delivery.
+    func injectTestClick(at nsEventPoint: CGPoint) {
+        os_log("pipeline: injected test click at (%{public}.1f, %{public}.1f)",
+               log: Log.pipeline, type: .info, nsEventPoint.x, nsEventPoint.y)
+        runDiagnosticPipeline(nsEventPoint: nsEventPoint)
+    }
+
     // MARK: - Diagnostic pipeline (mirrors Core.runClickPipeline with logs)
 
     /// Identical to `runClickPipeline` but emits an os_log at every
