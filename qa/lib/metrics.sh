@@ -235,7 +235,9 @@ PY
 #   CLICKTOMIN_BADGE_GIST_TOKEN — PAT with `gist` scope
 # Skipped silently if either env var is missing (CI-friendly).
 qa::metrics_push_gist() {
-    if [[ -z "${CLICKTOMIN_BADGE_GIST_ID:-}" || -z "${CLICKTOMIN_BADGE_GIST_TOKEN:-}" ]]; then
+    local gist_id="${CLICKTOMIN_BADGE_GIST_ID:-${QA_BADGE_GIST_ID:-}}"
+    local gist_token="${CLICKTOMIN_BADGE_GIST_TOKEN:-${GIST_SECRET:-}}"
+    if [[ -z "$gist_id" || -z "$gist_token" ]]; then
         qa::info "[metrics] gist env vars not set — skipping badge push"
         return 0
     fi
@@ -243,6 +245,7 @@ qa::metrics_push_gist() {
         qa::warn "[metrics] no badges directory — skipping gist push"
         return 0
     fi
+    CLICKTOMIN_BADGE_GIST_ID="$gist_id" CLICKTOMIN_BADGE_GIST_TOKEN="$gist_token" \
     /usr/bin/python3 - "$QA_METRICS_BADGES_DIR" <<PY
 import json, os, sys, urllib.request
 badges_dir = sys.argv[1]
