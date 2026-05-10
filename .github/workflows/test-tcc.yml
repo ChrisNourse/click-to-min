@@ -46,7 +46,7 @@ jobs:
           echo "cliclick:   $CLICLICK"
           echo ""
           for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent kTCCServiceScreenCapture kTCCServiceDeveloperTool; do
-            for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK"; do
+            for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK" "/usr/bin/osascript"; do
               grant_tcc "$BIN" "$SERVICE"
             done
           done
@@ -85,11 +85,19 @@ jobs:
           CY=$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')
           echo "Click target: ($CX, $CY)"
           # First test: does cliclick even work? Click desktop to deactivate TextEdit
-          echo "--- Test A: cliclick deactivates TextEdit by clicking elsewhere ---"
+          echo "--- Test A: cliclick click at (100,400) ---"
           cliclick "c:100,400"
           sleep 1
           FM=$("$AXPROBE" frontmost-bundle-id)
-          echo "After click elsewhere, frontmost: $FM"
+          echo "After cliclick elsewhere, frontmost: $FM"
+          # Test A2: try osascript System Events click instead
+          osascript -e 'tell application "TextEdit" to activate'
+          sleep 1
+          echo "--- Test A2: System Events click at (100,400) ---"
+          osascript -e 'tell application "System Events" to click at {100, 400}' 2>&1 || echo "System Events click failed"
+          sleep 1
+          FM=$("$AXPROBE" frontmost-bundle-id)
+          echo "After System Events click elsewhere, frontmost: $FM"
           # Reactivate TextEdit
           osascript -e 'tell application "TextEdit" to activate'
           sleep 1
