@@ -12,7 +12,7 @@
   </a>
   <img src="https://img.shields.io/badge/macOS-13%2B-lightgrey" alt="macOS 13+"/>
   <img src="https://img.shields.io/badge/Swift-5.9-orange" alt="Swift 5.9"/>
-  <img src="https://img.shields.io/badge/version-0.1.0--wip-blue" alt="v0.1.0 WIP"/>
+  <img src="https://img.shields.io/github/v/tag/ChrisNourse/click-to-min?label=version&color=blue" alt="version"/>
 </p>
 
 <p align="center">
