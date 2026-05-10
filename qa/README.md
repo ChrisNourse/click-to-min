@@ -28,9 +28,20 @@ Reports land in `qa/reports/<timestamp>.md` with inline metrics and warnings.
 
 On the VM: System Settings → General → Sharing → **Remote Login** ON.
 
-From host:
+Find the VM's IP — open Terminal on the VM and run:
 ```bash
-ssh-copy-id tester@$(ipconfig getifaddr en0)  # VM's IP, usually 192.168.64.x
+ipconfig getifaddr en0
+```
+It will be something like `192.168.64.x` (UTM shared networking uses this range).
+
+From your host, copy your SSH key:
+```bash
+ssh-copy-id tester@192.168.64.x   # replace x with the IP from above
+```
+
+Verify passwordless login works:
+```bash
+ssh tester@192.168.64.x "echo ok"
 ```
 
 ### 3. Run Bootstrap
