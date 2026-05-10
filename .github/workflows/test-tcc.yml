@@ -50,9 +50,12 @@ jobs:
 
       - name: Launch ClickToMin and verify
         run: |
+          sleep 2
           open ClickToMin.app
-          sleep 3
+          sleep 5
           pgrep -l ClickToMin || echo "Not running"
+          echo "=== ClickToMin lifecycle logs ==="
+          log show --last 8s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -15 || true
 
       - name: Verify AX is-trusted
         run: |
