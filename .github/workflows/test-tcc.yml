@@ -1,7 +1,8 @@
 name: Test TCC Accessibility Grant
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [test/tcc-grant]
 
 jobs:
   test-tcc:
