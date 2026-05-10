@@ -1,0 +1,21 @@
+[qa] building ClickToMin.app (release)
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.17s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] 04: baseline tilesize=48 orientation=bottom autohide=0
+[qa] launching ClickToMin.app
+[qa] 04: tilesize=96
+[qa] 04: tilesize=32
+[qa] 04: orientation=left
+[qa] 04: orientation=right
+[qa] 04: orientation=bottom
+[qa] 04: autohide=true
+[qa] 04: autohide=false
+PASS 04-dock-config
+[qa] 04: restoring Dock baseline

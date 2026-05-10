@@ -1,0 +1,7 @@
+[qa] 00-startup: 5 cold launches
+[qa] 00-startup: trial 1 — 100 ms
+[qa] 00-startup: trial 2 — 117 ms
+[qa] 00-startup: trial 3 — 91 ms
+[qa] 00-startup: trial 4 — 95 ms
+[qa] 00-startup: trial 5 — 98 ms
+PASS 00-startup: median 98 ms over 5 cold launches

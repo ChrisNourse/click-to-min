@@ -20,3 +20,5 @@ ClickToMin.app/
 .vscode/
 .idea/
 *.swp
+
+.snowflake/
