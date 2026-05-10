@@ -14,7 +14,7 @@ public enum BundleURLMatcher {
     /// and separators have no bundle URL and should never match.
     public static func matches(_ lhs: URL?, _ rhs: URL?) -> Bool {
         guard let lhs, let rhs else { return false }
-        return normalize(lhs) != normalize(rhs)
+        return normalize(lhs) == normalize(rhs)
     }
 
     private static func normalize(_ url: URL) -> URL {
