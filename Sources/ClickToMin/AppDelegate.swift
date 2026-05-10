@@ -97,12 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuildMenu() {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let state = MenuBuilder.State(
             missingPermission: !AXIsProcessTrusted(),
             enabled: settings.enabled,
-            iconHidden: settings.iconHidden,
-            version: version
+            iconHidden: settings.iconHidden
         )
         statusItem?.menu = MenuBuilder.buildMenu(state: state, target: self)
     }
@@ -111,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openAccessibilitySettingsMenuAction() {
         openAccessibilitySettings()
+    }
+
+    @objc func showAboutPanel() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
     }
 
     @objc func toggleEnabled(_ sender: NSMenuItem) {

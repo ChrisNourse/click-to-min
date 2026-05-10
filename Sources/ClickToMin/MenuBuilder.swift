@@ -6,41 +6,12 @@ enum MenuBuilder {
         var missingPermission: Bool
         var enabled: Bool
         var iconHidden: Bool
-        var version: String
     }
 
     static func buildMenu(state: State, target: AnyObject) -> NSMenu {
         let menu = NSMenu()
 
-        let statusItem: NSMenuItem
-        if state.missingPermission {
-            statusItem = NSMenuItem(
-                title: "Needs Accessibility Permission\u{2026}",
-                action: #selector(AppDelegate.openAccessibilitySettingsMenuAction),
-                keyEquivalent: ""
-            )
-            statusItem.target = target
-            statusItem.image = NSImage(
-                systemSymbolName: "circle.fill",
-                accessibilityDescription: "Permission required"
-            )?.withSymbolConfiguration(
-                NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            )
-            statusItem.toolTip = "Click to open System Settings \u{2192} Privacy & Security \u{2192} Accessibility"
-        } else {
-            statusItem = NSMenuItem(
-                title: "Ready",
-                action: nil,
-                keyEquivalent: ""
-            )
-            statusItem.image = NSImage(
-                systemSymbolName: "checkmark.circle.fill",
-                accessibilityDescription: "Permission granted"
-            )?.withSymbolConfiguration(
-                NSImage.SymbolConfiguration(paletteColors: [.systemGreen])
-            )
-        }
-        menu.addItem(statusItem)
+        menu.addItem(statusMenuItem(missingPermission: state.missingPermission, target: target))
 
         menu.addItem(NSMenuItem.separator())
 
@@ -65,10 +36,11 @@ enum MenuBuilder {
         menu.addItem(NSMenuItem.separator())
 
         let aboutItem = NSMenuItem(
-            title: "About ClickToMin v\(state.version)",
-            action: nil,
+            title: "About ClickToMin",
+            action: #selector(AppDelegate.showAboutPanel),
             keyEquivalent: ""
         )
+        aboutItem.target = target
         menu.addItem(aboutItem)
 
         menu.addItem(
@@ -78,5 +50,36 @@ enum MenuBuilder {
         )
 
         return menu
+    }
+
+    private static func statusMenuItem(missingPermission: Bool, target: AnyObject) -> NSMenuItem {
+        if missingPermission {
+            let item = NSMenuItem(
+                title: "Needs Accessibility Permission\u{2026}",
+                action: #selector(AppDelegate.openAccessibilitySettingsMenuAction),
+                keyEquivalent: ""
+            )
+            item.target = target
+            item.image = NSImage(
+                systemSymbolName: "circle.fill",
+                accessibilityDescription: "Permission required"
+            )?.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            )
+            item.toolTip = "Click to open System Settings \u{2192} Privacy & Security \u{2192} Accessibility"
+            return item
+        }
+        let item = NSMenuItem(
+            title: "Ready",
+            action: nil,
+            keyEquivalent: ""
+        )
+        item.image = NSImage(
+            systemSymbolName: "checkmark.circle.fill",
+            accessibilityDescription: "Permission granted"
+        )?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(paletteColors: [.systemGreen])
+        )
+        return item
     }
 }
