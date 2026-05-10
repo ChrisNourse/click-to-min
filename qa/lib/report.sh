@@ -166,9 +166,8 @@ for tl in table_lines:
     if len(parts) >= 3:
         suite = parts[0]
         status = parts[1]
-        dur = parts[2]
-        if not dur.endswith("s"):
-            dur += "s"
+        dur = parts[2].rstrip("s")
+        dur += "s"
         note_key = suite.replace(".sh", "")
         notes = suite_notes.get(note_key, "")
         out.append(f"| {suite} | {status} | {dur} | {notes} |")
