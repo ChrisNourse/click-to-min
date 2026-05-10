@@ -61,25 +61,20 @@ System Settings → Privacy & Security → Accessibility → add ALL:
 - `/Applications/AXProbe.app`
 - `~/click-to-min/ClickToMin.app`
 - `/opt/homebrew/bin/cliclick`
-- Terminal.app
+- `/System/Applications/Utilities/Terminal.app`
 
 Also click "Allow" on any popup dialogs asking to control the computer.
 
-### 5. Snapshot
+### 5. Update QA_SSH_HOST
 
-Right-click VM in UTM → Take Snapshot → name it `qa-ready`.
+Set the VM IP in your shell so `run.sh` connects to the right place:
+```bash
+export QA_SSH_HOST="tester@192.168.64.x"
+```
+
+Or add it to your `.zshrc`/`.bashrc` to persist across sessions.
 
 Done. `./qa/run.sh` works from now on.
-
-## Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `QA_VM_NAME` | `macOS` | UTM virtual machine name |
-| `QA_SSH_HOST` | `tester@192.168.64.5` | SSH user@host |
-| `QA_SSH_KEY` | (agent) | SSH private key path |
-| `QA_SSH_TIMEOUT` | `90` | Seconds to wait for SSH after boot |
-| `QA_REMOTE_DIR` | `~/click-to-min` | Repo path on VM |
 
 ## Suites
 
@@ -95,38 +90,8 @@ Done. `./qa/run.sh` works from now on.
 
 ## Metrics
 
-Performance metrics are recorded in `qa/metrics/history.jsonl` and classified
-against thresholds in `qa/metrics/thresholds.json`:
-
-| Metric | Green | Orange | Red |
-|--------|-------|--------|-----|
-| startup | <1000ms | 1-2s | >2s |
-| memory | <40MB | 40-80MB | >80MB |
-| idle-cpu | <1 wake/s | 1-10 | >10 |
-| tap-overhead | <100us | 100-500us | >500us |
-| latency | <250ms | 250-500ms | >500ms |
-
-## Layout
-
-```
-qa/
-├── run.sh              host-side orchestrator (UTM + rsync + SSH)
-├── README.md           this file
-├── MANUAL-CHECKLIST.md non-automatable items (sleep/wake, display hot-plug)
-├── suites/             test scripts + orchestrator
-│   ├── run-all.sh      suite runner (called by run.sh on the VM)
-│   ├── 00-startup.sh .. 06-settings.sh
-├── lib/                shared bash helpers
-│   ├── common.sh       build, launch, log, assertion helpers
-│   ├── report.sh       markdown report + enrichment
-│   ├── metrics.sh      history, badges, regression guard
-│   └── xctrace-parse.sh
-├── harness/AXProbe/    Swift CLI for AX queries
-├── metrics/            thresholds + badge output
-├── reports/            timestamped run output (gitignored)
-└── vm-setup/
-    └── bootstrap.sh    first-time VM provisioning
-```
+Performance thresholds and history are in `qa/metrics/thresholds.json`.
+See that file for green/orange/red classification values.
 
 ## CI
 
@@ -137,8 +102,8 @@ The `qa-smoke` job in `.github/workflows/ci.yml` runs on every PR:
 ## Troubleshooting
 
 - **VM won't start**: UTM must be open (AppleScript needs it running)
-- **SSH timeout**: Increase `QA_SSH_TIMEOUT=120`
+- **SSH timeout**: `export QA_SSH_TIMEOUT=120`
 - **TCC revoked after rebuild**: The skip-rebuild logic in `lib/common.sh`
   prevents this. If it happens, re-grant ClickToMin.app in System Settings.
 - **xctrace errors**: Requires full Xcode. Suite skips gracefully with CLT only.
-- **cliclick permission**: Grant Terminal.app Accessibility on the VM.
+- **cliclick permission**: Grant `/System/Applications/Utilities/Terminal.app` Accessibility on the VM.
