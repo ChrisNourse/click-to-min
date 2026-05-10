@@ -1,1 +1,2 @@
 {"ts":"2026-05-10T03:32:02Z","git_sha":"df5f96f","metrics":{"startup_ms":95.0,"memory_mb":28.8,"idle_cpu_wakeups_per_sec":0.7,"active_cpu_tap_overhead_us_p50":1.69,"latency_ms_p50":191.0}}
+{"ts":"2026-05-10T05:07:57Z","git_sha":"c943272","metrics":{"startup_ms":95.0,"memory_mb":28.8,"idle_cpu_wakeups_per_sec":0.7,"active_cpu_tap_overhead_us_p50":1.69,"latency_ms_p50":191.0}}
