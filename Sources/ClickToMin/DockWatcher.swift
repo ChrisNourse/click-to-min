@@ -61,12 +61,60 @@ final class DockWatcher {
         os_log("DockWatcher stopped", log: Log.lifecycle, type: .info)
     }
 
-    /// Inject a fake click for CI testing. Exercises the full real pipeline
-    /// without requiring CGEventTap delivery.
-    func injectTestClick(at nsEventPoint: CGPoint) {
-        os_log("pipeline: injected test click at (%{public}.1f, %{public}.1f)",
-               log: Log.pipeline, type: .info, nsEventPoint.x, nsEventPoint.y)
-        runDiagnosticPipeline(nsEventPoint: nsEventPoint)
+    /// Inject a fake click for CI testing. Takes AX coordinates (top-left origin)
+    /// and feeds directly into the pipeline starting at the geometry check,
+    /// skipping coordinate conversion.
+    func injectTestClick(at axPoint: CGPoint) {
+        os_log("pipeline: injected test click at AX (%{public}.1f, %{public}.1f)",
+               log: Log.pipeline, type: .info, axPoint.x, axPoint.y)
+
+        let geometry = DockGeometry(provider: dockFrameProvider)
+        guard geometry.contains(axPoint) else {
+            os_log("pipeline: test-click drop at contains (frame=%{public}@)",
+                   log: Log.pipeline, type: .info,
+                   dockFrameProvider.frame.map { NSStringFromRect($0) } ?? "nil")
+            return
+        }
+
+        guard let element = hitTester.hitTest(at: axPoint) else {
+            os_log("pipeline: test-click drop at hitTest (nil)", log: Log.pipeline, type: .info)
+            return
+        }
+
+        guard let dockPid = dockPIDCache.pid else {
+            os_log("pipeline: test-click drop at dockPID (nil)", log: Log.pipeline, type: .info)
+            return
+        }
+
+        let hitPid = hitTester.pid(element) ?? -1
+        guard hitPid == dockPid else {
+            os_log("pipeline: test-click drop at pid mismatch (hit=%{public}d dock=%{public}d)",
+                   log: Log.pipeline, type: .info, hitPid, dockPid)
+            return
+        }
+
+        guard let itemURL = hitTester.dockItemURL(element) else {
+            os_log("pipeline: test-click drop at dockItemURL (nil)", log: Log.pipeline, type: .info)
+            return
+        }
+
+        guard let front = frontmostProvider.frontmostPidAndURL else {
+            os_log("pipeline: test-click drop at frontmost (nil)", log: Log.pipeline, type: .info)
+            return
+        }
+
+        guard BundleURLMatcher.matches(itemURL, front.bundleURL) else {
+            os_log("pipeline: test-click drop at url mismatch", log: Log.pipeline, type: .info)
+            return
+        }
+
+        guard debouncer.shouldAllow(itemID: itemURL.absoluteString) else {
+            os_log("pipeline: test-click drop at debounce", log: Log.pipeline, type: .info)
+            return
+        }
+
+        minimizer.minimizeFocusedWindow(ofPid: front.pid, bundleURL: front.bundleURL)
+        os_log("pipeline: test-click minimize dispatched", log: Log.pipeline, type: .info)
     }
 
     // MARK: - Diagnostic pipeline (mirrors Core.runClickPipeline with logs)

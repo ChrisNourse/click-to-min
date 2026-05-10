@@ -96,7 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             watcher.injectTestClick(at: point)
-            try? "dispatched".write(toFile: resultPath, atomically: true, encoding: .utf8)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                try? "done".write(toFile: resultPath, atomically: true, encoding: .utf8)
+            }
             os_log("--test-click: dispatched at (%{public}.1f, %{public}.1f)",
                    log: Log.lifecycle, type: .info, point.x, point.y)
         }
