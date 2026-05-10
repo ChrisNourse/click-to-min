@@ -26,8 +26,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-qa::require_cliclick
 qa::build_release
+qa::require_click_tool
 
 qa::launch_app
 trap 'qa::quit_app' EXIT
@@ -73,19 +73,49 @@ IDLE_WAKEUPS_PER_SEC="$(awk -v a="$WAKE_AFTER" -v b="$WAKE_BEFORE" 'BEGIN{d=a-b;
 qa::info "05: idle wake-ups/sec = ${IDLE_WAKEUPS_PER_SEC}"
 
 # --- 3. Active-CPU tap overhead (p50 µs) --------------------------------------
-qa::info "05: active-cpu tap overhead (50 synthetic clicks)"
-for _ in $(seq 1 50); do
-    cliclick "c:10,10" >/dev/null 2>&1 || true
-    sleep 0.05
-done
-TAP_NS_FILE="$(mktemp -t clicktomin-tap-ns)"
-/usr/bin/log show --style syslog --info --debug --last 30s \
-    --predicate 'subsystem == "com.click-to-min" && category == "pipeline"' 2>/dev/null \
-    | grep -oE 'tap_overhead_ns=[0-9]+' \
-    | awk -F= '{print $2}' > "$TAP_NS_FILE" || true
-TAP_SAMPLES="$(wc -l < "$TAP_NS_FILE" | awk '{print $1}')"
-if [[ "$TAP_SAMPLES" -gt 0 ]]; then
-    TAP_P50_US="$(/usr/bin/python3 - "$TAP_NS_FILE" <<'PY'
+PERF_CLICK_COUNT=50
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    PERF_CLICK_COUNT=5
+fi
+qa::info "05: active-cpu tap overhead ($PERF_CLICK_COUNT synthetic clicks)"
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    INJECT_TIMES=""
+    qa::timeout_cmd 5 osascript -e 'tell application "Finder" to activate' >/dev/null 2>&1 || true
+    sleep 0.5
+    DOCK_FRAME="$(/usr/local/bin/axprobe dock-item-frame com.apple.Finder 2>/dev/null || "$PROJECT_ROOT/qa/harness/AXProbe/.build/release/axprobe" dock-item-frame com.apple.Finder 2>/dev/null || true)"
+    if [[ -n "$DOCK_FRAME" ]]; then
+        eval "$DOCK_FRAME"
+        CLICK_X="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
+        CLICK_Y="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+        for _ in $(seq 1 "$PERF_CLICK_COUNT"); do
+            qa::timeout_cmd 5 osascript -e 'tell application "Finder" to activate' >/dev/null 2>&1 || true
+            sleep 0.1
+            qa::dock_click
+            if [[ "$QA_INJECT_RESULT" == done:timing_ms=* ]]; then
+                local_ms="${QA_INJECT_RESULT#done:timing_ms=}"
+                INJECT_TIMES="${INJECT_TIMES}${local_ms}\n"
+            fi
+        done
+    fi
+    TAP_SAMPLES="$(printf '%b' "$INJECT_TIMES" | sed '/^$/d' | wc -l | awk '{print $1}')"
+    if [[ "$TAP_SAMPLES" -gt 0 ]]; then
+        TAP_P50_US="$(printf '%b' "$INJECT_TIMES" | sed '/^$/d' | sort -n | awk -v n="$TAP_SAMPLES" 'BEGIN{k=int(n*0.5); if(k<1)k=1} NR==k{printf "%.2f", $1*1000; exit}')"
+    else
+        TAP_P50_US="0.00"
+    fi
+else
+    for _ in $(seq 1 "$PERF_CLICK_COUNT"); do
+        cliclick "c:10,10" >/dev/null 2>&1 || true
+        sleep 0.05
+    done
+    TAP_NS_FILE="$(mktemp -t clicktomin-tap-ns)"
+    /usr/bin/log show --style syslog --info --debug --last 30s \
+        --predicate 'subsystem == "com.click-to-min" && category == "pipeline"' 2>/dev/null \
+        | grep -oE 'tap_overhead_ns=[0-9]+' \
+        | awk -F= '{print $2}' > "$TAP_NS_FILE" || true
+    TAP_SAMPLES="$(wc -l < "$TAP_NS_FILE" | awk '{print $1}')"
+    if [[ "$TAP_SAMPLES" -gt 0 ]]; then
+        TAP_P50_US="$(/usr/bin/python3 - "$TAP_NS_FILE" <<'PY'
 import sys, statistics
 vals = []
 with open(sys.argv[1]) as f:
@@ -100,10 +130,11 @@ else:
     print(f"{p50_ns/1000.0:.2f}")
 PY
     )"
-else
-    TAP_P50_US="0.00"
+    else
+        TAP_P50_US="0.00"
+    fi
+    rm -f "$TAP_NS_FILE"
 fi
-rm -f "$TAP_NS_FILE"
 qa::info "05: tap overhead p50 = ${TAP_P50_US}µs (${TAP_SAMPLES} samples)"
 
 # --- Output -------------------------------------------------------------------

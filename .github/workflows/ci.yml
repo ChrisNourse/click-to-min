@@ -165,6 +165,7 @@ jobs:
   integration-test:
     needs: bundle-check
     runs-on: macos-26
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
 
@@ -186,9 +187,18 @@ jobs:
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
           sudo ./scripts/ci-grant-tcc.sh "$BINARY" "$AXPROBE"
 
-      - name: Integration test (--test-click pipeline)
-        timeout-minutes: 2
-        run: ./scripts/ci-integration-test.sh com.apple.TextEdit
+      - name: Run full QA suite (inject mode)
+        timeout-minutes: 4
+        env:
+          QA_CLICK_MODE: inject
+        run: ./qa/suites/run-all.sh --inject
+
+      - name: Upload QA reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-qa-reports
+          path: qa/reports
 
   lint:
     runs-on: macos-14

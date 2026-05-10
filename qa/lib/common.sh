@@ -142,7 +142,7 @@ qa::require_axprobe_granted() {
     qa::require_axprobe
     local bin
     bin="$(qa::axprobe_bin)"
-    if ! "$bin" is-trusted >/dev/null 2>&1; then
+    if ! qa::timeout_cmd 5 "$bin" is-trusted >/dev/null 2>&1; then
         qa::fail "axprobe lacks Accessibility permission."
         qa::fail "Grant: System Settings -> Privacy & Security -> Accessibility -> add $bin"
         return 1
@@ -387,4 +387,124 @@ qa::log_show_last() {
     # `--info --debug` is required: all ClickToMin signposts are emitted at
     # os_log type .info, which `log show` hides by default.
     /usr/bin/log show --style syslog --info --debug --last "${seconds}s" --predicate "$predicate" 2>/dev/null
+}
+
+# --- Click abstraction (inject vs cliclick) ----------------------------------
+#
+# QA_CLICK_MODE controls how clicks are dispatched:
+#   cliclick (default) — real CGEventPost via cliclick binary
+#   inject             — --test-click pipeline injection (no event tap needed)
+#
+# All helpers require $CLICK_X and $CLICK_Y to be set (Dock tile center coords).
+
+QA_CLICK_MODE="${QA_CLICK_MODE:-cliclick}"
+
+qa::timeout_cmd() {
+    local secs="$1"
+    shift
+    if command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$secs" "$@"
+    elif command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"
+    else
+        perl -e 'alarm shift @ARGV; exec @ARGV' "$secs" "$@"
+    fi
+}
+
+qa::_inject_click() {
+    local spec="$1"
+    local result_file="/tmp/clicktomin-test-result.txt"
+    local app_bin="$PROJECT_ROOT/ClickToMin.app/Contents/MacOS/ClickToMin"
+
+    pkill -x ClickToMin 2>/dev/null || true
+    sleep 0.2
+    rm -f "$result_file"
+
+    "$app_bin" --test-click "$spec" &
+    local pid=$!
+
+    local waited=0
+    while [[ $waited -lt 20 ]]; do
+        if [[ -f "$result_file" ]]; then
+            local content
+            content="$(cat "$result_file")"
+            if [[ "$content" != "pending" ]]; then
+                kill "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+                QA_INJECT_RESULT="$content"
+                return 0
+            fi
+        fi
+        sleep 0.25
+        waited=$(( waited + 1 ))
+    done
+
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    QA_INJECT_RESULT="error:timeout"
+    return 1
+}
+
+qa::dock_click() {
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::_inject_click "$CLICK_X,$CLICK_Y"
+    else
+        cliclick "c:$CLICK_X,$CLICK_Y"
+    fi
+}
+
+qa::right_click_dock() {
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::_inject_click "$CLICK_X,$CLICK_Y:right"
+    else
+        cliclick "rc:$CLICK_X,$CLICK_Y"
+    fi
+}
+
+qa::ctrl_click_dock() {
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::_inject_click "$CLICK_X,$CLICK_Y:ctrl"
+    else
+        cliclick "kd:ctrl" "c:$CLICK_X,$CLICK_Y" "ku:ctrl"
+    fi
+}
+
+qa::rapid_click_dock() {
+    local count="${1:-3}"
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::_inject_click "$CLICK_X,$CLICK_Y:rapid:$count"
+    else
+        for _ in $(seq 1 "$count"); do
+            cliclick "c:$CLICK_X,$CLICK_Y"
+            sleep 0.05
+        done
+    fi
+}
+
+qa::require_click_tool() {
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        if [[ ! -x "$PROJECT_ROOT/ClickToMin.app/Contents/MacOS/ClickToMin" ]]; then
+            qa::fail "inject mode requires built ClickToMin.app"
+            return 1
+        fi
+    else
+        qa::require_cliclick
+    fi
+}
+
+qa::resolve_dock_tile() {
+    local bid="$1"
+    local axprobe_bin
+    axprobe_bin="$(qa::axprobe_bin)"
+    qa::timeout_cmd 10 open -gb "$bid" 2>/dev/null || true
+    sleep 1
+    local frame
+    frame="$(qa::timeout_cmd 10 "$axprobe_bin" dock-item-frame "$bid" 2>&1)" || {
+        qa::fail "dock-item-frame timed out for $bid"
+        return 1
+    }
+    eval "$frame"
+    CLICK_X="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
+    CLICK_Y="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+    qa::info "Dock tile for $bid at ($CLICK_X,$CLICK_Y)"
 }
