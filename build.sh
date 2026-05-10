@@ -13,6 +13,13 @@
 #     and confirm lifecycle signposts appear
 set -euo pipefail
 
+# Prefer swift.org toolchain when present (workaround for broken CLT 16.2
+# PackageDescription dylib that ships out-of-sync with its swiftmodule).
+TOOLCHAIN_BIN="/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin"
+if [[ -x "$TOOLCHAIN_BIN/swift" ]]; then
+    PATH="$TOOLCHAIN_BIN:$PATH"
+fi
+
 APP_NAME="ClickToMin"
 BUNDLE="${APP_NAME}.app"
 
