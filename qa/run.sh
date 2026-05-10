@@ -131,7 +131,7 @@ fi
 
 info "running QA suite${MODE:+ ($MODE)}..."
 REMOTE_RC=0
-REMOTE_OUTPUT="$(remote "eval \"\$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)\" && cd $QA_REMOTE_DIR && ./qa/suites/run-all.sh $MODE 2>&1" || true)"
+REMOTE_OUTPUT="$(remote "eval \"\$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)\" && cd $QA_REMOTE_DIR && QA_GIT_SHA=$SHA ./qa/suites/run-all.sh $MODE 2>&1" || true)"
 REMOTE_RC=$?
 
 printf "%s\n" "$REMOTE_OUTPUT"

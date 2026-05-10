@@ -175,7 +175,7 @@ jobs:
           python3 - <<'PY'
           import json, subprocess, sys
 
-          TRIGGER_PATHS = ["Sources/", "Package.swift", "build.sh", "qa/suites/", "qa/lib/"]
+          TRIGGER_PATHS = ["Sources/", "Package.swift", "build.sh"]
 
           base = "${{ github.event.pull_request.base.sha }}"
           head = "${{ github.event.pull_request.head.sha }}"

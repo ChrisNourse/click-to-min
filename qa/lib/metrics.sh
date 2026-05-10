@@ -102,13 +102,14 @@ with open(emit_path) as f:
         except ValueError:
             metrics[k] = v
 # Git SHA if available.
-sha = ""
-try:
-    sha = subprocess.check_output(
-        ["git", "rev-parse", "--short", "HEAD"],
-        stderr=subprocess.DEVNULL).decode().strip()
-except Exception:
-    pass
+sha = os.environ.get("QA_GIT_SHA", "")
+if not sha:
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        pass
 record = {
     "ts": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     "git_sha": sha,
