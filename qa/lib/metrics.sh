@@ -234,9 +234,7 @@ PY
 # Push all rendered badge JSONs to a GitHub Gist. Requires:
 #   CLICKTOMIN_BADGE_GIST_ID   — gist ID (once, bootstrap via qa/metrics/README.md)
 #   CLICKTOMIN_BADGE_GIST_TOKEN — PAT with `gist` scope
-# Skipped silently if either env var is missing. Devs do not need this token —
-# QA attestation is handled by qa-attest.yml (triggered via gh CLI at end of
-# run-all.sh). This function is only for optional perf badge publishing.
+# Skipped silently if either env var is missing (CI-friendly).
 qa::metrics_push_gist() {
     local gist_id="${CLICKTOMIN_BADGE_GIST_ID:-${QA_BADGE_GIST_ID:-}}"
     local gist_token="${CLICKTOMIN_BADGE_GIST_TOKEN:-${GIST_SECRET:-}}"

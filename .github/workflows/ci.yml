@@ -162,6 +162,34 @@ jobs:
           name: qa-reports
           path: qa/reports
 
+  integration-test:
+    needs: bundle-check
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Assemble .app bundle
+        run: ./build.sh
+
+      - name: Build AXProbe
+        run: swift build -c release --package-path qa/harness/AXProbe
+
+      - name: Grant TCC permissions
+        run: |
+          BINARY="$(pwd)/ClickToMin.app/Contents/MacOS/ClickToMin"
+          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
+          sudo ./scripts/ci-grant-tcc.sh "$BINARY" "$AXPROBE"
+
+      - name: Integration test (--test-click pipeline)
+        timeout-minutes: 2
+        run: ./scripts/ci-integration-test.sh com.apple.TextEdit
+
   lint:
     runs-on: macos-14
     steps:

@@ -167,19 +167,6 @@ printf "report: %s\n" "$REPORT_MD"
 printf "log:    %s\n" "$LOG_FILE"
 if [[ "$OVERALL" == "PASS" ]]; then
     qa::pass "run-all ($MODE)"
-    if [[ "$MODE" == "FULL" ]]; then
-        local_sha="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo "")"
-        if [[ -n "$local_sha" ]] && command -v gh &>/dev/null; then
-            qa::info "Attesting QA pass for $local_sha via GitHub Actions..."
-            if gh workflow run qa-attest.yml -f sha="$local_sha" 2>/dev/null; then
-                qa::pass "QA attestation dispatched (sha=$local_sha)"
-            else
-                qa::warn "gh workflow dispatch failed — attest manually: gh workflow run qa-attest.yml -f sha=$local_sha"
-            fi
-        else
-            qa::warn "gh CLI not available — attest manually: gh workflow run qa-attest.yml -f sha=$local_sha"
-        fi
-    fi
     exit 0
 else
     qa::fail "run-all ($MODE)"
