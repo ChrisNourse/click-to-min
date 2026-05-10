@@ -103,11 +103,11 @@ jobs:
           sleep 1
           FM=$("$AXPROBE" frontmost-bundle-id)
           echo "After reactivate, frontmost: $FM"
-          echo "--- Test B: click Dock tile while TextEdit is frontmost ---"
-          cliclick "c:$CX,$CY"
+          echo "--- Test B: click Dock tile via AX (System Events) ---"
+          osascript -e 'tell application "System Events" to click UI element "TextEdit" of list 1 of application process "Dock"' 2>&1 || echo "AX Dock click failed"
           sleep 1
           FM2=$("$AXPROBE" frontmost-bundle-id)
-          echo "After Dock click, frontmost: $FM2"
+          echo "After AX Dock click, frontmost: $FM2"
           echo "--- Test C: wait for ClickToMin minimize ---"
           if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 3; then
             echo "SUCCESS: Window minimized!"
