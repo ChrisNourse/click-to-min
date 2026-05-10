@@ -41,27 +41,34 @@ jobs:
           sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
             "SELECT * FROM access WHERE service='kTCCServiceAccessibility';"
 
-      - name: Also grant to AXProbe
-        run: |
-          swift build -c release --package-path qa/harness/AXProbe
-          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/AXProbe"
-          echo "AXProbe: $AXPROBE"
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$AXPROBE', 1, 2, 3, 1);" \
-            && echo "INSERT succeeded" || echo "INSERT failed"
-
-      - name: Test AX access (launch app + probe)
+      - name: Test AX access (launch app + verify)
         run: |
           echo "=== Launching ClickToMin ==="
           open ClickToMin.app
           sleep 3
           echo "=== Checking if running ==="
           pgrep -l ClickToMin || echo "Not running"
-          echo ""
-          echo "=== Testing AXProbe ==="
-          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/AXProbe"
-          "$AXPROBE" --pid "$(pgrep ClickToMin)" 2>&1 || echo "AXProbe exit code: $?"
 
-      - name: Run QA smoke (full mode attempt)
+      - name: Grant Accessibility to AXProbe (correct binary name)
         run: |
-          ./qa/suites/run-all.sh --ci 2>&1 || echo "QA exit code: $?"
+          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
+          echo "AXProbe binary: $AXPROBE"
+          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$AXPROBE', 1, 2, 3, 1);"
+          echo "Granted AX to axprobe"
+
+      - name: Verify AX is-trusted
+        run: |
+          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
+          "$AXPROBE" is-trusted && echo "AX TRUSTED" || echo "AX NOT TRUSTED (exit $?)"
+
+      - name: Run FULL QA suite
+        run: |
+          ./qa/suites/run-all.sh 2>&1 || echo "QA exit code: $?"
+
+      - name: Upload QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports
+          path: qa/reports
