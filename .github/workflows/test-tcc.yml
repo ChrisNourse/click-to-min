@@ -59,7 +59,39 @@ jobs:
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
           "$AXPROBE" is-trusted && echo "AX TRUSTED" || echo "AX NOT TRUSTED (exit $?)"
 
-      - name: Run FULL QA suite
+      - name: Quick minimize test (bypass full suite)
+        run: |
+          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
+          # Ensure Safari is running with a window
+          open -a Safari
+          sleep 2
+          osascript -e 'tell application "Safari" to make new document' 2>/dev/null || true
+          sleep 1
+          # Get Dock tile frame
+          FRAME=$("$AXPROBE" dock-item-frame com.apple.Safari 2>&1) && echo "Dock frame: $FRAME" || { echo "dock-item-frame FAILED: $FRAME"; exit 1; }
+          eval "$FRAME"
+          CX=$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')
+          CY=$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')
+          echo "Click target: ($CX, $CY)"
+          # Make Safari frontmost
+          osascript -e 'tell application "Safari" to activate'
+          sleep 1
+          FM=$("$AXPROBE" frontmost-bundle-id)
+          echo "Frontmost before click: $FM"
+          # Click Dock tile — should trigger ClickToMin minimize
+          cliclick "c:$CX,$CY"
+          echo "Click sent, waiting for minimize..."
+          if "$AXPROBE" wait-until-minimized com.apple.Safari --timeout 3; then
+            echo "SUCCESS: Window minimized!"
+          else
+            echo "FAILED: Window did not minimize within 3s"
+            echo ""
+            echo "=== Debug: checking ClickToMin logs ==="
+            log show --last 10s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -20
+            exit 1
+          fi
+
+      - name: Run FULL QA suite (only if quick test passed)
         run: |
           ./qa/suites/run-all.sh 2>&1 || echo "QA exit code: $?"
 
