@@ -25,28 +25,35 @@ jobs:
       - name: Grant TCC permissions to all binaries
         run: |
           BINARY_PATH="$(pwd)/ClickToMin.app/Contents/MacOS/ClickToMin"
+          swift build -c release --package-path qa/harness/AXProbe
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
           CLICLICK="$(which cliclick)"
           TCC_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+
+          grant_tcc() {
+            local bin="$1"
+            local service="$2"
+            # Get csreq blob for the binary
+            codesign -dr - "$bin" 2>&1 | awk -F ' => ' '/designated/{print $2}' | csreq -r- -b /tmp/csreq.bin
+            local CSREQ_HEX=$(xxd -p /tmp/csreq.bin | tr -d '\n')
+            sudo sqlite3 "$TCC_DB" \
+              "INSERT OR REPLACE INTO access VALUES('$service','$bin',1,2,3,1,X'$CSREQ_HEX',NULL,0,'UNUSED',NULL,NULL,$(date +%s));" \
+              && echo "  $service -> $(basename "$bin") OK" \
+              || echo "  $service -> $(basename "$bin") FAILED"
+          }
+
           echo "ClickToMin: $BINARY_PATH"
           echo "AXProbe:    $AXPROBE"
           echo "cliclick:   $CLICLICK"
           echo ""
-          # Grant all three TCC services needed for GUI testing:
-          #   Accessibility — AX tree queries + control
-          #   ListenEvent  — CGEventTap receives global events (ClickToMin's tap)
-          #   PostEvent    — cliclick posts synthetic mouse events
           for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent; do
             for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK"; do
-              sudo sqlite3 "$TCC_DB" \
-                "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('$SERVICE', '$BIN', 1, 2, 3, 1);" \
-                && echo "  $SERVICE -> $(basename "$BIN") OK" \
-                || echo "  $SERVICE -> $(basename "$BIN") FAILED"
+              grant_tcc "$BIN" "$SERVICE"
             done
           done
           echo ""
-          echo "=== All TCC grants ==="
-          sudo sqlite3 "$TCC_DB" "SELECT service, client FROM access;"
+          echo "=== Verify grants ==="
+          sudo sqlite3 "$TCC_DB" "SELECT service, client FROM access WHERE auth_value=2;"
 
       - name: Launch ClickToMin and verify
         run: |
