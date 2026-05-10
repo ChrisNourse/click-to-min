@@ -7,8 +7,9 @@ stay that way.
 ## Requirements
 
 - macOS 13 or later (Ventura+)
-- Xcode Command Line Tools (`xcode-select --install`) — full Xcode is
-  optional and only useful for interactive debugging
+- Swift 5.9+ toolchain:
+  - **swift.org toolchain** (https://swift.org/download/) — recommended
+  - **Full Xcode** — optional, useful for interactive debugging
 - [SwiftFormat](https://github.com/nicklockwood/SwiftFormat)
   (`brew install swiftformat`) — CI lints with this
 
@@ -33,6 +34,18 @@ swift run
 # Build a distributable .app bundle
 ./build.sh
 open ClickToMin.app
+```
+
+### Troubleshooting: `swift build` link error
+
+If `swift build` fails with `Undefined symbols ... PackageDescription.Package.__allocating_init`, the Command Line Tools 16.2 package ships a `libPackageDescription.dylib` out-of-sync with its `PackageDescription.swiftmodule`. Workaround: install the swift.org toolchain.
+
+```bash
+# Download + install Swift 6.0.3 pkg from
+# https://swift.org/download/
+# Then add its bin to PATH:
+echo 'export PATH="/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ### Using Xcode
