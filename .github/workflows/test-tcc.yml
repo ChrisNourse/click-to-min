@@ -19,6 +19,9 @@ jobs:
       - name: Assemble .app bundle
         run: ./build.sh
 
+      - name: Install cliclick
+        run: brew install cliclick
+
       - name: Show TCC DB structure
         run: |
           echo "=== TCC DB schema ==="
@@ -49,13 +52,17 @@ jobs:
           echo "=== Checking if running ==="
           pgrep -l ClickToMin || echo "Not running"
 
-      - name: Grant Accessibility to AXProbe (correct binary name)
+      - name: Grant Accessibility to AXProbe and cliclick
         run: |
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
-          echo "AXProbe binary: $AXPROBE"
+          CLICLICK="$(which cliclick)"
+          echo "AXProbe: $AXPROBE"
+          echo "cliclick: $CLICLICK"
           sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
             "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$AXPROBE', 1, 2, 3, 1);"
-          echo "Granted AX to axprobe"
+          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$CLICLICK', 1, 2, 3, 1);"
+          echo "Granted AX to axprobe + cliclick"
 
       - name: Verify AX is-trusted
         run: |
