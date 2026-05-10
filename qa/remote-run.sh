@@ -123,6 +123,7 @@ if [[ "$SKIP_SYNC" -eq 0 ]]; then
         --exclude '.swiftpm' \
         --exclude 'qa/reports' \
         --exclude 'qa/harness/AXProbe/.build' \
+        --exclude 'clicktomin-release.p12' \
         -e "ssh ${SSH_OPTS[*]}" \
         "$PROJECT_ROOT/" "$QA_SSH_HOST:$QA_REMOTE_DIR/"
     info "synced"

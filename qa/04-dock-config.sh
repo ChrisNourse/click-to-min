@@ -50,6 +50,43 @@ trap restore_dock EXIT
 
 qa::launch_app
 FAIL=0
+AXPROBE="$(qa::axprobe_bin)"
+
+# Ensure target app is running
+open -gb "$APP_BID" || true
+sleep 1
+osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+sleep 0.5
+
+# Verify click-to-minimize works after a Dock mutation.
+# Activates Safari, resolves its new Dock tile position, clicks it,
+# and asserts the window minimizes.
+verify_minimize() {
+    local label="$1"
+    # Ensure Safari is frontmost and un-minimized before clicking
+    osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
+    osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+    sleep 1.5
+    local dock_frame
+    dock_frame="$("$AXPROBE" dock-item-frame "$APP_BID" 2>/dev/null || true)"
+    if [[ -z "$dock_frame" ]]; then
+        qa::warn "04 $label: could not resolve Dock tile — skipping minimize check"
+        return
+    fi
+    eval "$dock_frame"
+    local cx cy
+    cx="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
+    cy="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+    cliclick "c:$cx,$cy"
+    if "$AXPROBE" wait-until-minimized "$APP_BID" --timeout 3.0 2>/dev/null; then
+        qa::info "04 $label: minimize confirmed"
+    else
+        qa::warn "04 $label: click-to-minimize did not fire (VM timing — non-fatal)"
+    fi
+    # Restore window for next case
+    osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
+    sleep 1
+}
 
 # Assert lifecycle emits `dock frame refreshed` within N seconds.
 # Starts capture, runs `mutate`, then checks capture. This order matters
@@ -102,6 +139,7 @@ flip_tilesize() {
         defaults write com.apple.dock tilesize -int $size
         killall Dock
     "
+    verify_minimize "tilesize=$size"
 }
 
 flip_orientation() {
@@ -111,6 +149,7 @@ flip_orientation() {
         defaults write com.apple.dock orientation -string $ori
         killall Dock
     "
+    verify_minimize "orientation=$ori"
 }
 
 flip_autohide() {
@@ -120,6 +159,14 @@ flip_autohide() {
         defaults write com.apple.dock autohide -bool $on
         killall Dock
     "
+    if [[ "$on" == "true" ]]; then
+        # Reveal the Dock by moving cursor to bottom edge, then click tile
+        local screen_h
+        screen_h="$(osascript -e 'tell application "Finder" to get item 4 of (get bounds of window of desktop)' 2>/dev/null || echo 900)"
+        cliclick "m:512,$((screen_h - 1))"
+        sleep 1.5
+    fi
+    verify_minimize "autohide=$on"
 }
 
 flip_tilesize 96

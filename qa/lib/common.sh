@@ -163,13 +163,23 @@ qa::axprobe_bin() {
 
 # --- Build / launch ---------------------------------------------------------
 
-# Build ClickToMin.app via build.sh. Idempotent.
+# Build ClickToMin.app via build.sh. Skips rebuild if app exists and binary is
+# newer than source (avoids TCC grant loss from ad-hoc re-sign on every run).
 qa::build_release() {
+    local app="$PROJECT_ROOT/ClickToMin.app"
+    local bin="$app/Contents/MacOS/ClickToMin"
+    if [[ -x "$bin" ]]; then
+        local newest_src
+        newest_src="$(find "$PROJECT_ROOT/Sources" -name '*.swift' -newer "$bin" 2>/dev/null | head -1)"
+        if [[ -z "$newest_src" ]]; then
+            qa::info "ClickToMin.app is up to date — skipping rebuild"
+            return 0
+        fi
+    fi
     qa::require_swift_toolchain || return 1
     qa::info "building ClickToMin.app (release)"
-    # Keep stdout visible (build.sh prints progress). Errors propagate.
     (cd "$PROJECT_ROOT" && ./build.sh)
-    if [[ ! -d "$PROJECT_ROOT/ClickToMin.app" ]]; then
+    if [[ ! -d "$app" ]]; then
         qa::fail "ClickToMin.app not produced by build.sh"
         return 1
     fi

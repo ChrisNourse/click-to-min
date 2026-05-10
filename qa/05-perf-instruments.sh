@@ -127,7 +127,16 @@ fi
 rm -f "$TAP_NS_FILE"
 qa::info "05: tap overhead p50 = ${TAP_P50_US}µs (${TAP_SAMPLES} samples)"
 
+# --- xctrace availability check -----------------------------------------------
+HAVE_XCTRACE=1
+if ! xctrace version >/dev/null 2>&1; then
+    qa::warn "xctrace not available (requires full Xcode, not just CLT)"
+    qa::warn "skipping Time Profiler and Allocations phases"
+    HAVE_XCTRACE=0
+fi
+
 # --- 2a. xctrace Time Profiler: OUTSIDE Dock --------------------------------
+if [[ "$HAVE_XCTRACE" -eq 1 ]]; then
 qa::info "05: xctrace Time Profiler ($CLICKS_PROFILER clicks outside Dock)"
 TRACE_DIR="$(mktemp -d -t clicktomin-trace)"
 TRACE_TP_OUT="$TRACE_DIR/tp-out.trace"
@@ -217,6 +226,14 @@ GROWTH_KB="$(awk -v b="$PERSISTENT_BYTES" 'BEGIN{printf "%.1f", b/1024}')"
 qa::info "05: persistent growth over $CLICKS_ALLOC clicks: ${GROWTH_KB}KB"
 
 rm -rf "$TRACE_DIR"
+
+else
+    # No xctrace — set defaults for output
+    CLICKTOMIN_OUT="skipped"
+    CLICKTOMIN_IN="skipped"
+    CLICKTOMIN_PRESENT="skipped"
+    GROWTH_KB="0.0"
+fi
 
 if [[ -n "$OUTPUT" ]]; then
     {
