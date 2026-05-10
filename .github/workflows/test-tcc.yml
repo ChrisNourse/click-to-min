@@ -32,10 +32,13 @@ jobs:
             local bin="$1" service="$2"
             codesign -dr - "$bin" 2>&1 | awk -F ' => ' '/designated/{print $2}' | csreq -r- -b /tmp/csreq.bin
             local CSREQ_HEX=$(xxd -p /tmp/csreq.bin | tr -d '\n')
+            # Grant in both user and system TCC databases
             sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier_type, indirect_object_identifier) VALUES ('$service','$bin',1,2,3,1,X'$CSREQ_HEX',0,'UNUSED');" \
+              "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier_type, indirect_object_identifier) VALUES ('$service','$bin',1,2,3,1,X'$CSREQ_HEX',0,'UNUSED');" 2>/dev/null
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+              "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier_type, indirect_object_identifier) VALUES ('$service','$bin',1,2,3,1,X'$CSREQ_HEX',0,'UNUSED');" 2>/dev/null \
               && echo "  $service -> $(basename "$bin") OK" \
-              || echo "  $service -> $(basename "$bin") FAILED"
+              || echo "  $service -> $(basename "$bin") FAILED (system DB)"
           }
 
           for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent kTCCServiceScreenCapture; do
@@ -43,6 +46,16 @@ jobs:
               grant_tcc "$BIN" "$SERVICE"
             done
           done
+
+      - name: Verify AXIsProcessTrusted for ClickToMin
+        run: |
+          # Quick sanity: run the binary momentarily and check if it logs "permission granted"
+          sudo killall tccd 2>/dev/null || true
+          sleep 1
+          timeout 5 ./ClickToMin.app/Contents/MacOS/ClickToMin &
+          sleep 3
+          log show --last 4s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | grep -i "permission\|granted\|missing\|pipeline\|DockWatcher\|test-click" || echo "No relevant logs found"
+          pkill -x ClickToMin 2>/dev/null || true
 
       - name: Test --test-click pipeline
         timeout-minutes: 1
