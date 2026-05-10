@@ -61,7 +61,9 @@ jobs:
 
       - name: Quick minimize test (bypass full suite)
         run: |
-          AXPROBE="$(find qa/harness/AXProbe/.build -name axprobe -type f | head -1)"
+          swift build -c release --package-path qa/harness/AXProbe 2>&1 | tail -3
+          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
+          ls -la "$AXPROBE" || { echo "axprobe not at expected path, searching..."; AXPROBE="$(find . -path '*/AXProbe/.build/*/release/axprobe' -type f | head -1)"; }
           echo "Using: $AXPROBE"
           open -a Safari
           sleep 2
