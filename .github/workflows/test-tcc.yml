@@ -33,11 +33,10 @@ jobs:
           grant_tcc() {
             local bin="$1"
             local service="$2"
-            # Get csreq blob for the binary
             codesign -dr - "$bin" 2>&1 | awk -F ' => ' '/designated/{print $2}' | csreq -r- -b /tmp/csreq.bin
             local CSREQ_HEX=$(xxd -p /tmp/csreq.bin | tr -d '\n')
             sudo sqlite3 "$TCC_DB" \
-              "INSERT OR REPLACE INTO access VALUES('$service','$bin',1,2,3,1,X'$CSREQ_HEX',NULL,0,'UNUSED',NULL,NULL,$(date +%s));" \
+              "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier_type, indirect_object_identifier) VALUES ('$service','$bin',1,2,3,1,X'$CSREQ_HEX',0,'UNUSED');" \
               && echo "  $service -> $(basename "$bin") OK" \
               || echo "  $service -> $(basename "$bin") FAILED"
           }
