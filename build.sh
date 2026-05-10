@@ -30,16 +30,39 @@ cp "Resources/menubar-icon@2x.png" "$BUNDLE/Contents/Resources/menubar-icon@2x.p
 
 plutil -lint "$BUNDLE/Contents/Info.plist"
 
-# Ad-hoc codesign. --deep is deprecated on macOS 14+; we have a single-binary
-# bundle with no nested frameworks so it's unnecessary. If the single-pass
-# sign emits a warning, fall back to signing the inner binary first.
-if ! codesign --sign - --force --timestamp=none "$BUNDLE" 2>/tmp/clicktomin-codesign.err; then
+# Codesign. Prefer a stable self-signed identity so TCC grants (Accessibility)
+# survive rebuilds — every byte change of the Mach-O rotates the cdhash, and
+# an ad-hoc signature binds TCC to that cdhash, forcing a re-grant after every
+# `swift build`. A proper signing identity binds TCC to the certificate +
+# bundle identifier instead, so recompiles no longer invalidate the grant.
+#
+# Usage:
+#   1. Create a local self-signed cert once (Keychain Access -> Certificate
+#      Assistant -> Create a Certificate, name "ClickToMin Local Dev",
+#      Identity Type "Self Signed Root", Certificate Type "Code Signing").
+#   2. `export CLICKTOMIN_SIGN_ID="ClickToMin Local Dev"` (or set in your shell
+#      rc). Absent the env var, build.sh auto-detects that exact common name
+#      in the login keychain.
+#   3. If no identity is available, fall back to ad-hoc (`-`). That still
+#      produces a runnable bundle — only TCC persistence is lost.
+SIGN_ID="${CLICKTOMIN_SIGN_ID:-ClickToMin Local Dev}"
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_ID"; then
+    echo "No '$SIGN_ID' codesigning identity in keychain — falling back to ad-hoc." >&2
+    echo "  TCC grants will be lost on every rebuild. See build.sh comments." >&2
+    SIGN_ID="-"
+fi
+
+# `--identifier` pins the TCC identity independent of the Mach-O path, so the
+# Accessibility grant survives bundle relocations too.
+if ! codesign --sign "$SIGN_ID" --identifier com.click-to-min \
+        --force --timestamp=none "$BUNDLE" 2>/tmp/clicktomin-codesign.err; then
     echo "Single-pass codesign warned; falling back to two-step sign..." >&2
     cat /tmp/clicktomin-codesign.err >&2 || true
-    codesign --sign - --force "$BUNDLE/Contents/MacOS/$APP_NAME"
-    codesign --sign - --force "$BUNDLE"
+    codesign --sign "$SIGN_ID" --identifier com.click-to-min --force \
+        "$BUNDLE/Contents/MacOS/$APP_NAME"
+    codesign --sign "$SIGN_ID" --identifier com.click-to-min --force "$BUNDLE"
 fi
 
 codesign --verify --verbose "$BUNDLE"
 
-echo "Built $BUNDLE"
+echo "Built $BUNDLE (signed: $SIGN_ID)"

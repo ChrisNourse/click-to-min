@@ -1,0 +1,19 @@
+[qa] building ClickToMin.app (release)
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.17s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] 02: resolving Dock tile frame for com.apple.Safari
+[qa] 02: Dock tile at (385,1155)
+[qa] launching ClickToMin.app
+[qa] 02: case 1 — bring-to-front
+[qa] 02: case 2 — frontmost-to-minimize
+[qa] 02: case 3 — restore (no interference)
+[qa] 02: latency across 20 trials
+[qa] 02: latency samples=20 p50=191ms p95=194ms
+PASS 02-core-behavior

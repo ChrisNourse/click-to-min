@@ -1,0 +1,21 @@
+[qa] building ClickToMin.app (release)
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.17s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] launching ClickToMin.app
+[qa] 05: idle RSS + CPU% sampling for 300s
+[qa] 05: idle RSS mean=24.9MB peak=28.8MB
+[qa] 05: idle CPU mean=0.10% peak=2.90%
+[qa] 05: idle wake-ups (idle-cpu) over 10s
+[qa] 05: idle wake-ups/sec = 0.50
+[qa] 05: active-cpu tap overhead (50 synthetic clicks)
+[qa] 05: tap overhead p50 = 1.67µs (50 samples)
+[qa] 05: xctrace Time Profiler (1000 clicks outside Dock)
+[qa] 05: ClickToMin in top-10 hotspots (outside Dock): no
+[qa] 05: xctrace Time Profiler (1000 clicks inside Dock)

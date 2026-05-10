@@ -128,6 +128,107 @@ jobs:
           path: ClickToMin.app
           retention-days: 7
 
+  qa-smoke:
+    needs: bundle-check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: "spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}"
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      # pinned 2026-04-22, Xcode versions on this runner: 15.2, 15.3, 15.4 (source: https://github.com/actions/runner-images)
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build AXProbe harness
+        run: swift build -c release --package-path qa/harness/AXProbe
+
+      - name: Test AXProbe harness
+        run: swift test --package-path qa/harness/AXProbe
+
+      - name: Run CI-safe QA subset
+        run: ./qa/suites/run-all.sh --ci
+
+      - name: Upload QA report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports
+          path: qa/reports
+
+  qa-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if full QA report required
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, sys
+
+          TRIGGER_PATHS = ["Sources/", "Package.swift", "build.sh"]
+
+          base = "${{ github.event.pull_request.base.sha }}"
+          head = "${{ github.event.pull_request.head.sha }}"
+
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", base, head],
+              text=True
+          ).strip().splitlines()
+
+          triggered = [f for f in changed if any(f.startswith(p) for p in TRIGGER_PATHS)]
+          if not triggered:
+              print("No source changes — QA gate skipped")
+              sys.exit(0)
+
+          print(f"Source files changed ({len(triggered)}):")
+          for f in triggered[:10]:
+              print(f"  {f}")
+
+          last_source_sha = subprocess.check_output(
+              ["git", "log", "-1", "--format=%h", "--", *TRIGGER_PATHS],
+              text=True
+          ).strip()
+
+          try:
+              with open("qa/metrics/history.jsonl") as f:
+                  lines = [json.loads(l) for l in f if l.strip()]
+          except FileNotFoundError:
+              lines = []
+
+          if not lines:
+              print("\n❌ No QA report found (qa/metrics/history.jsonl is empty or missing)")
+              print(f"\nRun the full suite and commit the report:")
+              print(f"  ./qa/run.sh")
+              print(f"  git add qa/reports/ qa/metrics/history.jsonl")
+              print(f"  git commit -m 'chore: qa report'")
+              sys.exit(1)
+
+          report_sha = lines[-1].get("git_sha", "")
+          print(f"\nLast source commit: {last_source_sha}")
+          print(f"Last QA report SHA: {report_sha}")
+
+          if report_sha == last_source_sha:
+              print("✓ QA report matches last source change")
+              sys.exit(0)
+
+          print(f"\n❌ QA report is stale — tested {report_sha} but last source change is {last_source_sha}")
+          print(f"\nRun the full suite after your code changes:")
+          print(f"  ./qa/run.sh")
+          print(f"  git add qa/reports/ qa/metrics/history.jsonl")
+          print(f"  git commit -m 'chore: qa report'")
+          sys.exit(1)
+          PY
+
   lint:
     runs-on: macos-14
     steps:

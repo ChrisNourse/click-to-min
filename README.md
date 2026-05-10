@@ -15,6 +15,16 @@
   <img src="https://img.shields.io/badge/version-0.1.0--wip-blue" alt="v0.1.0 WIP"/>
 </p>
 
+<p align="center">
+  <!-- Performance badges. Live JSON endpoints come from the Gist configured
+       in qa/metrics/README.md; `qa/run-all.sh` updates them on every full run. -->
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/startup_ms.json" alt="startup"/>
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/memory_mb.json" alt="memory"/>
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/idle_cpu_wakeups_per_sec.json" alt="idle-cpu"/>
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/active_cpu_tap_overhead_us_p50.json" alt="active-cpu"/>
+  <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/latency_ms_p50.json" alt="latency"/>
+</p>
+
 ---
 
 **ClickToMin** is a tiny macOS menu bar utility that restores a Dock behavior you didn't know you were missing: clicking the Dock icon of the already-frontmost app minimizes its window.
@@ -160,6 +170,18 @@ swift test --parallel
 # Live log stream
 log stream --predicate 'subsystem == "com.click-to-min"'
 ```
+
+### Running the QA suite
+
+`qa/run-all.sh` drives the release build through a scripted replacement for the manual Layer 2/3 checklist and writes a timestamped report to `qa/reports/`.
+
+```bash
+./qa/run-all.sh --ci        # CI-safe subset (01-smoke only)
+./qa/run-all.sh             # full local run; requires Accessibility grant
+./qa/run-all.sh --baseline  # full run + mirror Current into PERF.md Baseline
+```
+
+Prereqs: `brew install cliclick`; Accessibility granted to both `ClickToMin.app` and `qa/harness/AXProbe/.build/release/axprobe`. See `qa/README.md` for details and `qa/MANUAL-CHECKLIST.md` for items that can't be scripted.
 
 ## Contributing
 

@@ -1,0 +1,20 @@
+[qa] 01-smoke: swift build -c release
+[qa] 01-smoke: build.sh -> ClickToMin.app
+[qa] building ClickToMin.app (release)
+[0/1] Planning build
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.19s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] 01-smoke: codesign verify
+/Users/tester/click-to-min/ClickToMin.app: valid on disk
+/Users/tester/click-to-min/ClickToMin.app: satisfies its Designated Requirement
+[qa] 01-smoke: plutil lint
+[qa] 01-smoke: launching + capturing 10s of signposts
+[qa] launching ClickToMin.app
+PASS 01-smoke

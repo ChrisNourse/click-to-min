@@ -225,7 +225,10 @@ Note: `LSUIElement` only takes effect when launched from the `.app` bundle.
 2. `mkdir -p ClickToMin.app/Contents/{MacOS,Resources}`
 3. Copy binary → `Contents/MacOS/ClickToMin`
 4. Copy `Info.plist` → `Contents/`
-5. **Ad-hoc codesign**: `codesign --sign - --force --timestamp=none ClickToMin.app` — single-binary bundle, no nested frameworks, so `--deep` (deprecated on macOS 14+) is unnecessary. Sign the inner binary first if a warning appears: `codesign --sign - --force ClickToMin.app/Contents/MacOS/ClickToMin && codesign --sign - --force ClickToMin.app`
+5. **Stable self-signed codesign** (preferred): if a local codesigning identity named `ClickToMin Local Dev` (or `$CLICKTOMIN_SIGN_ID`) is present in the login keychain, sign with it via `codesign --sign "$SIGN_ID" --identifier com.click-to-min --force --timestamp=none ClickToMin.app`. This keeps the TCC Accessibility grant across rebuilds (ad-hoc cdhash changes on every build and revokes the grant). The `--identifier com.click-to-min` pin also preserves the grant across bundle relocations.
+6. **Ad-hoc fallback**: if no identity is found, emit a loud warning ("TCC grants will be lost on every rebuild") and fall back to `codesign --sign -`. Setup-once instructions for the self-signed identity live in `qa/README.md` / `clicktomin-vm-setup.md`. Creating and distributing this identity reproducibly — likely via Homebrew or a setup script — is tracked as an open todo in `docs/todos/`.
+
+> **Open question**: the current self-signed flow requires manual Keychain Access cert creation + ACL tweaks on every dev machine. A Homebrew formula that installs + trusts a shared dev identity was discussed but not implemented. See `docs/todos/signing-streamlining.md`.
 
 ### 8. CI/CD (GitHub Actions + Branch Protection)
 
@@ -271,7 +274,7 @@ Required settings:
   - **Dismiss stale approvals when new commits are pushed**: ON
   - **Require review from Code Owners**: OFF for v1 (no CODEOWNERS file yet)
 - **Require status checks to pass before merging**: ON
-  - Required checks: `build-test`, `bundle-check`, `lint`
+  - Required checks: `build-test`, `bundle-check`, `lint`, `qa-smoke`
   - **Require branches to be up to date before merging**: ON (forces rebase/merge of latest `main` before merge, catches semantic conflicts)
 - **Require conversation resolution before merging**: ON
 - **Require linear history**: ON (forbids merge commits; enforces squash-or-rebase merge strategy)
@@ -333,7 +336,7 @@ All disabled by default in release via `os_log`'s private/public annotations —
 | Auto-hidden Dock | Cached rect widened to full screen-edge strip so short-circuit still fires while Dock is revealed |
 | Missed Dock-frame refresh | Fallback: re-query frame once on a near-miss click before bailing |
 | Case-sensitive volume with Safari.app at non-canonical case | Bundle URL matcher does not case-fold; exact compare after symlink resolution |
-| TCC permission loss on rebuild | Ad-hoc codesign in `build.sh` stabilizes TCC identity |
+| TCC permission loss on rebuild | Stable self-signed codesign identity (`ClickToMin Local Dev`) + `--identifier com.click-to-min` pin in `build.sh` — ad-hoc is a fallback only |
 
 ## Critical Files
 
@@ -396,64 +399,64 @@ Add a test target in `Package.swift`. Factor pure logic out of `DockWatcher` int
 
 ### Layer 2 — Manual Test Checklist
 
-Run before every release. Organized by category.
+Most of Layer 2 is now automated by `qa/run-all.sh` (see `docs/todos/phase-6-qa-automation.md`). What remains here as manual is the subset that cannot be scripted — first-grant TCC flow, sleep/wake, display hot-plug — tracked in `qa/MANUAL-CHECKLIST.md`. The checkboxes below are marked `[x]` where an automated suite now covers the check end-to-end; `[ ]` where the check genuinely still requires a human (hardware, TCC first-grant, subjective judgement).
 
-**Smoke**
-- [ ] `swift build` compiles cleanly
-- [ ] `./build.sh` produces signed `ClickToMin.app`
-- [ ] Launch `.app` → menu bar icon appears, Accessibility prompt fires
-- [ ] Grant Accessibility in System Settings → Privacy & Security → Accessibility
-- [ ] Quit via menu bar item exits cleanly, no lingering process
-- [ ] Re-measured memory & idle CPU, updated `PERF.md`, flagged any >20% regression (skip allowed with documented reason)
-- [ ] `log stream --predicate 'subsystem == "com.click-to-min"'` shows expected lifecycle signposts on launch
+**Smoke** (automated: `qa/01-smoke.sh`, `qa/run-all.sh`)
+- [x] `swift build` compiles cleanly
+- [x] `./build.sh` produces signed `ClickToMin.app`
+- [ ] Launch `.app` → menu bar icon appears, Accessibility prompt fires *(TCC first-grant — manual, tracked in `qa/MANUAL-CHECKLIST.md`)*
+- [ ] Grant Accessibility in System Settings → Privacy & Security → Accessibility *(TCC first-grant — manual)*
+- [x] Quit via menu bar item exits cleanly, no lingering process
+- [x] Re-measured memory & idle CPU (now `qa/metrics/history.jsonl` + shields.io badges); regression guard fails the run if any metric regresses past the `fail_multiplier` in `qa/metrics/thresholds.json`
+- [x] `log stream --predicate 'subsystem == "com.click-to-min"'` shows expected lifecycle signposts on launch
 
-**Core Behavior**
-- [ ] Safari active, click Dock icon → key window minimizes
-- [ ] Click Dock icon again → window restores (macOS default)
-- [ ] Background app Dock click → comes to front normally, no minimize
-- [ ] 3-click cycle works: background → foreground → minimize → restore
+**Core Behavior** (automated: `qa/02-core-behavior.sh`)
+- [x] Safari active, click Dock icon → key window minimizes
+- [x] Click Dock icon again → window restores (macOS default)
+- [x] Background app Dock click → comes to front normally, no minimize
+- [x] 3-click cycle works: background → foreground → minimize → restore
 
-**Multi-Window**
-- [ ] Two TextEdit docs open, one focused, click Dock → only focused minimizes, other stays
-- [ ] Focus second doc, click Dock → second minimizes
-- [ ] All minimized, click Dock → macOS restores one (no interference)
+**Multi-Window** (automated: `qa/03-edge-cases.sh` case D)
+- [x] Two docs open, one focused, click Dock → only focused minimizes, other stays
+- [x] Focus second doc, click Dock → second minimizes
+- [x] All minimized, click Dock → macOS restores one (no interference)
 
-**Edge Cases**
-- [ ] Click Finder Dock icon (active) → no crash, no unintended minimize
-- [ ] Click Trash → no crash
-- [ ] Click Downloads stack → no crash
-- [ ] Click Show Desktop / separator → no crash
-- [ ] Full-screen Safari, click Dock → no crash (may no-op; acceptable)
-- [ ] Stage Manager enabled → no crash
-- [ ] **Frozen app timeout**: `kill -STOP <pid>` a frontmost app, click its Dock icon, confirm pipeline returns within ~300ms (not stalled). `kill -CONT <pid>` to restore. Validates AX messaging timeout. If stall observed, the system-wide timeout is a no-op on this OS — document and rely on per-app timeout alone.
-- [ ] **Right-click** Dock icon of frontmost app → context menu opens, no minimize (confirms `.leftMouseDown` scope)
-- [ ] **Ctrl-click** Dock icon of frontmost app → context menu opens, no minimize
-- [ ] **Long-press** Dock icon to show window previews, then click a preview → no crash, no stray minimize (confirms preview-element parent-walk bails cleanly)
-- [ ] "Recent Applications" Dock section enabled, click a Recent app when frontmost → either minimizes via title-fallback identifier, or cleanly no-ops; document observed behavior
+**Edge Cases** (automated subset: `qa/03-edge-cases.sh` cases A–E)
+- [x] Click Finder Dock icon (active) → no crash, no unintended minimize *(covered by general click validation)*
+- [ ] Click Trash → no crash *(manual — Trash DockItem lacks a stable bundle id)*
+- [ ] Click Downloads stack → no crash *(manual — stack state is ephemeral)*
+- [ ] Click Show Desktop / separator → no crash *(manual — separator presence is user-config-dependent)*
+- [ ] Full-screen Safari, click Dock → no crash (may no-op; acceptable) *(manual — full-screen toggling requires human)*
+- [ ] Stage Manager enabled → no crash *(manual — Stage Manager state is a System Settings toggle)*
+- [x] **Frozen app timeout**: `kill -STOP <pid>`, click, return within ~300ms (case A)
+- [x] **Right-click** Dock icon → context menu opens, no minimize (case E)
+- [x] **Ctrl-click** Dock icon → context menu opens, no minimize (case E)
+- [ ] **Long-press** Dock icon → preview opens, click a preview → no crash *(manual — long-press timing is gesture-level)*
+- [ ] "Recent Applications" Dock section enabled, click a Recent app when frontmost *(manual — requires seeded Dock layout)*
 
-**Multi-Display**
-- [ ] Dock on primary display → works
-- [ ] Dock on secondary display (right of primary) → works
-- [ ] Dock on secondary display (left of primary, negative origin) → works
-- [ ] Hot-plug: disconnect external display while app is running → no crash, `DockGeometry` refreshes
+**Multi-Display** (not automated — requires hardware)
+- [ ] Dock on primary display → works *(manual, covered by Layer 2 release pass)*
+- [ ] Dock on secondary display (right of primary) → works *(manual)*
+- [ ] Dock on secondary display (left of primary, negative origin) → works *(manual)*
+- [ ] Hot-plug: disconnect external display → no crash, `DockGeometry` refreshes *(manual — tracked in `qa/MANUAL-CHECKLIST.md`)*
 
-**Permission Lifecycle**
-- [ ] Revoke Accessibility while app is running → subsequent clicks no-op (no crash); monitor torn down
-- [ ] Re-grant Accessibility without sleeping → 2s poll detects grant, monitor reinstalls, behavior resumes
-- [ ] Sleep/wake cycle → permission re-check fires, still works
-- [ ] Fresh install: launch app before granting permission, then grant → monitor starts producing events (validates post-grant install)
-- [ ] Rebuild with `./build.sh` → Accessibility permission persists (codesign identity stable)
-- [ ] `tccutil reset Accessibility com.click-to-min` → next launch re-prompts cleanly (recovery path documented for users hitting stuck permission state)
+**Permission Lifecycle** (mix — scripted where possible, manual where TCC is)
+- [ ] Revoke Accessibility while app is running → subsequent clicks no-op (no crash); monitor torn down *(manual — TCC toggle)*
+- [ ] Re-grant Accessibility without sleeping → 2s poll detects grant, monitor reinstalls *(manual — TCC toggle)*
+- [ ] Sleep/wake cycle → permission re-check fires, still works *(manual — `qa/MANUAL-CHECKLIST.md`)*
+- [ ] Fresh install: launch app before granting permission, then grant → monitor starts producing events *(manual — TCC first-grant)*
+- [x] Rebuild with `./build.sh` → Accessibility permission persists (stable self-signed identity; see §7)
+- [ ] `tccutil reset Accessibility com.click-to-min` → next launch re-prompts cleanly *(manual recovery-path spot-check)*
 
-**Dock Configuration**
-- [ ] Resize Dock via System Settings → short-circuit still works (frame refresh on `com.apple.dock.prefchanged`)
-- [ ] Move Dock left/right/bottom → short-circuit still works
-- [ ] Enable Dock auto-hide → reveal Dock → click icon → still minimizes
-- [ ] Disable Dock auto-hide → frame snaps back to visible rect
+**Dock Configuration** (automated: `qa/04-dock-config.sh`)
+- [x] Resize Dock via `defaults write tilesize` → short-circuit still works (frame refresh on `com.apple.dock.prefchanged`)
+- [x] Move Dock left/right/bottom → short-circuit still works
+- [x] Enable Dock auto-hide → reveal Dock → click icon → still minimizes
+- [x] Disable Dock auto-hide → frame snaps back to visible rect
 
-**Race Conditions**
-- [ ] Rapid double-click Dock icon → exactly one minimize, no oscillation
-- [ ] Click Dock icon during app launch animation → no crash
+**Race Conditions** (automated: `qa/03-edge-cases.sh` cases B, C)
+- [x] Rapid double-click Dock icon → exactly one minimize, no oscillation (case B)
+- [x] Click Dock icon during app launch animation → no crash (case C)
 
 ### Layer 3 — Performance Validation
 

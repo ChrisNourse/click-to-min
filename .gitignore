@@ -13,7 +13,11 @@ ClickToMin.app/
 # macOS
 .DS_Store
 
+# Secrets / signing
+*.p12
+
 # Editor / IDE
 .vscode/
 .idea/
 *.swp
+.snowflake/

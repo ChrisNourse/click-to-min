@@ -1,0 +1,20 @@
+[qa] building ClickToMin.app (release)
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.17s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] launching ClickToMin.app
+[qa] 06-A: disable ClickToMin via defaults
+PASS 06-A: disabled mode — click did not minimize
+[qa] 06-B: re-enable ClickToMin via defaults
+minimized=true
+PASS 06-B: re-enabled mode — click minimized
+[qa] 06-C: hide icon + relaunch
+[qa] launching ClickToMin.app
+PASS 06-C: relaunch un-hides icon
+[qa] 06: all settings tests passed

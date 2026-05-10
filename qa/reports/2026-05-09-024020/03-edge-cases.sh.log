@@ -1,0 +1,19 @@
+[qa] building ClickToMin.app (release)
+Building for production...
+[0/2] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.18s)
+ClickToMin.app/Contents/Info.plist: OK
+No 'ClickToMin Local Dev' codesigning identity in keychain — falling back to ad-hoc.
+  TCC grants will be lost on every rebuild. See build.sh comments.
+ClickToMin.app: valid on disk
+ClickToMin.app: satisfies its Designated Requirement
+Built ClickToMin.app (signed: -)
+[qa] launching ClickToMin.app
+[qa] 03: case A — frozen app timeout
+[qa] 03: case B — rapid double-click debounce
+[qa] 03: case C — launch-race
+[qa] 03: case D — multi-window
+app not running or AX query failed: com.apple.Safari
+WARN case D: window-count changed 3->0 (minimize should preserve count)
+[qa] 03: case E — right-click / ctrl-click non-trigger
+PASS 03-edge-cases

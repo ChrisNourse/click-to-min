@@ -9,7 +9,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+
+OUTPUT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --output) OUTPUT="$2"; shift 2 ;;
+        *) qa::fail "unknown flag: $1"; exit 1 ;;
+    esac
+done
 
 APP_BID="com.apple.Safari"
 BUNDLE_DEFAULTS="com.click-to-min"
