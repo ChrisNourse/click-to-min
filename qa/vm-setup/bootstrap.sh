@@ -79,6 +79,29 @@ REPO_DIR="$HOME/click-to-min"
 mkdir -p "$REPO_DIR"
 info "repo: directory ready at $REPO_DIR (synced via rsync from host)"
 
+# --- Code signing identity for TCC persistence ---------------------------------
+CERT_NAME="ClickToMin Local Dev"
+KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -qF "$CERT_NAME"; then
+    info "signing cert: '$CERT_NAME' already in keychain"
+else
+    info "signing cert: creating '$CERT_NAME' for TCC persistence"
+    P12_PASS="localdev"
+    openssl req -x509 -newkey rsa:2048 -keyout /tmp/ctm-key.pem -out /tmp/ctm-cert.pem \
+        -days 7300 -nodes -subj "/CN=$CERT_NAME" \
+        -addext "keyUsage=digitalSignature" \
+        -addext "extendedKeyUsage=codeSigning" 2>/dev/null
+    openssl pkcs12 -export -out /tmp/ctm-dev.p12 \
+        -inkey /tmp/ctm-key.pem -in /tmp/ctm-cert.pem \
+        -passout "pass:$P12_PASS" 2>/dev/null
+    security unlock-keychain -p "${USER_PASSWORD:-tester123}" "$KEYCHAIN" 2>/dev/null || true
+    security import /tmp/ctm-dev.p12 -k "$KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+        -k "${USER_PASSWORD:-tester123}" "$KEYCHAIN" >/dev/null 2>&1
+    rm -f /tmp/ctm-key.pem /tmp/ctm-cert.pem /tmp/ctm-dev.p12
+    info "signing cert: installed"
+fi
+
 # --- Build AXProbe + create .app bundle for TCC persistence -------------------
 if [[ -d "$REPO_DIR/qa/harness/AXProbe" ]]; then
     info "axprobe: building..."

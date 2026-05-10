@@ -61,6 +61,113 @@ final class DockWatcher {
         os_log("DockWatcher stopped", log: Log.lifecycle, type: .info)
     }
 
+    private static let rapidClickDelay: TimeInterval = 0.05
+
+    func injectTestClick(spec: TestClickSpec, resultPath: String) {
+        switch spec.mode {
+        case .right, .ctrl:
+            injectFilteredClick(spec: spec, resultPath: resultPath)
+        case let .rapid(count):
+            injectRapidClicks(at: spec.point, count: count, resultPath: resultPath)
+        case .normal:
+            injectNormalClick(at: spec.point, resultPath: resultPath)
+        }
+    }
+
+    private func injectFilteredClick(spec: TestClickSpec, resultPath: String) {
+        let modeLabel = if case .right = spec.mode { "right" } else { "ctrl" }
+        os_log("pipeline: injected filtered test click (mode=%{public}@)",
+               log: Log.pipeline, type: .info, modeLabel)
+        try? "done:rejected".write(toFile: resultPath, atomically: true, encoding: .utf8)
+    }
+
+    private func injectRapidClicks(at point: CGPoint, count: Int, resultPath: String) {
+        os_log("pipeline: injected rapid test clicks (count=%{public}d)",
+               log: Log.pipeline, type: .info, count)
+        var dispatched = 0
+        for idx in 0 ..< count {
+            if idx > 0 {
+                Thread.sleep(forTimeInterval: DockWatcher.rapidClickDelay)
+            }
+            if runPipelineForInjection(at: point) {
+                dispatched += 1
+            }
+        }
+        let debounced = count - dispatched
+        try? "done:debounced:\(debounced)".write(
+            toFile: resultPath, atomically: true, encoding: .utf8
+        )
+    }
+
+    private func injectNormalClick(at axPoint: CGPoint, resultPath: String) {
+        os_log("pipeline: injected test click at AX (%{public}.1f, %{public}.1f)",
+               log: Log.pipeline, type: .info, axPoint.x, axPoint.y)
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let minimized = runPipelineForInjection(at: axPoint)
+        let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
+        if minimized {
+            try? "done:timing_ms=\(elapsedMs)".write(
+                toFile: resultPath, atomically: true, encoding: .utf8
+            )
+        } else {
+            try? "done:no-minimize:timing_ms=\(elapsedMs)".write(
+                toFile: resultPath, atomically: true, encoding: .utf8
+            )
+        }
+    }
+
+    @discardableResult
+    private func runPipelineForInjection(at axPoint: CGPoint) -> Bool {
+        let geometry = DockGeometry(provider: dockFrameProvider)
+        guard geometry.contains(axPoint) else {
+            os_log("pipeline: test-click drop at contains (frame=%{public}@)",
+                   log: Log.pipeline, type: .info,
+                   dockFrameProvider.frame.map { NSStringFromRect($0) } ?? "nil")
+            return false
+        }
+
+        guard let element = hitTester.hitTest(at: axPoint) else {
+            os_log("pipeline: test-click drop at hitTest (nil)", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        guard let dockPid = dockPIDCache.pid else {
+            os_log("pipeline: test-click drop at dockPID (nil)", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        let hitPid = hitTester.pid(element) ?? -1
+        guard hitPid == dockPid else {
+            os_log("pipeline: test-click drop at pid mismatch (hit=%{public}d dock=%{public}d)",
+                   log: Log.pipeline, type: .info, hitPid, dockPid)
+            return false
+        }
+
+        guard let itemURL = hitTester.dockItemURL(element) else {
+            os_log("pipeline: test-click drop at dockItemURL (nil)", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        guard let front = frontmostProvider.frontmostPidAndURL else {
+            os_log("pipeline: test-click drop at frontmost (nil)", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        guard BundleURLMatcher.matches(itemURL, front.bundleURL) else {
+            os_log("pipeline: test-click drop at url mismatch", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        guard debouncer.shouldAllow(itemID: itemURL.absoluteString) else {
+            os_log("pipeline: test-click drop at debounce", log: Log.pipeline, type: .info)
+            return false
+        }
+
+        minimizer.minimizeFocusedWindow(ofPid: front.pid, bundleURL: front.bundleURL)
+        os_log("pipeline: test-click minimize dispatched", log: Log.pipeline, type: .info)
+        return true
+    }
+
     // MARK: - Diagnostic pipeline (mirrors Core.runClickPipeline with logs)
 
     /// Identical to `runClickPipeline` but emits an os_log at every

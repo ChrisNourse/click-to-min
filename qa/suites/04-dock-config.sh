@@ -25,9 +25,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-qa::require_cliclick
 qa::require_axprobe_granted
 qa::build_release
+qa::require_click_tool
 
 # --- Snapshot baseline ------------------------------------------------------
 BASELINE_TILESIZE="$(defaults read com.apple.dock tilesize 2>/dev/null || echo 48)"
@@ -53,9 +53,9 @@ FAIL=0
 AXPROBE="$(qa::axprobe_bin)"
 
 # Ensure target app is running
-open -gb "$APP_BID" || true
+open -gb "$APP_BID" 2>/dev/null || true
 sleep 1
-osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1 || true
 sleep 0.5
 
 # Verify click-to-minimize works after a Dock mutation.
@@ -63,28 +63,33 @@ sleep 0.5
 # and asserts the window minimizes.
 verify_minimize() {
     local label="$1"
-    # Ensure Safari is frontmost and un-minimized before clicking
-    osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
-    osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+    qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
+    qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
     sleep 1.5
     local dock_frame
-    dock_frame="$("$AXPROBE" dock-item-frame "$APP_BID" 2>/dev/null || true)"
+    dock_frame="$(qa::timeout_cmd 10 "$AXPROBE" dock-item-frame "$APP_BID" 2>/dev/null || true)"
     if [[ -z "$dock_frame" ]]; then
         qa::warn "04 $label: could not resolve Dock tile — skipping minimize check"
         return
     fi
     eval "$dock_frame"
-    local cx cy
-    cx="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
-    cy="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
-    cliclick "c:$cx,$cy"
-    if "$AXPROBE" wait-until-minimized "$APP_BID" --timeout 3.0 2>/dev/null; then
-        qa::info "04 $label: minimize confirmed"
+    CLICK_X="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
+    CLICK_Y="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+    qa::dock_click
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        if [[ "$QA_INJECT_RESULT" == done:timing_ms=* ]]; then
+            qa::info "04 $label: minimize confirmed (inject)"
+        else
+            qa::warn "04 $label: inject did not minimize ($QA_INJECT_RESULT)"
+        fi
     else
-        qa::warn "04 $label: click-to-minimize did not fire (VM timing — non-fatal)"
+        if "$AXPROBE" wait-until-minimized "$APP_BID" --timeout 3.0 2>/dev/null; then
+            qa::info "04 $label: minimize confirmed"
+        else
+            qa::warn "04 $label: click-to-minimize did not fire (VM timing — non-fatal)"
+        fi
     fi
-    # Restore window for next case
-    osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
+    qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to set miniaturized of windows to false" 2>/dev/null || true
     sleep 1
 }
 
@@ -160,11 +165,12 @@ flip_autohide() {
         killall Dock
     "
     if [[ "$on" == "true" ]]; then
-        # Reveal the Dock by moving cursor to bottom edge, then click tile
-        local screen_h
-        screen_h="$(osascript -e 'tell application "Finder" to get item 4 of (get bounds of window of desktop)' 2>/dev/null || echo 900)"
-        cliclick "m:512,$((screen_h - 1))"
-        sleep 1.5
+        if [[ "$QA_CLICK_MODE" != "inject" ]]; then
+            local screen_h
+            screen_h="$(qa::timeout_cmd 5 osascript -e 'tell application "Finder" to get item 4 of (get bounds of window of desktop)' 2>/dev/null || echo 900)"
+            cliclick "m:512,$((screen_h - 1))"
+            sleep 1.5
+        fi
     fi
     verify_minimize "autohide=$on"
 }

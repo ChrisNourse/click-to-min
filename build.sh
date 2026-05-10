@@ -46,7 +46,8 @@ plutil -lint "$BUNDLE/Contents/Info.plist"
 #   3. If no identity is available, fall back to ad-hoc (`-`). That still
 #      produces a runnable bundle — only TCC persistence is lost.
 SIGN_ID="${CLICKTOMIN_SIGN_ID:-ClickToMin Local Dev}"
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGN_ID"; then
+security unlock-keychain -p "${KEYCHAIN_PASSWORD:-}" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+if ! security find-identity -p codesigning 2>/dev/null | grep -qF "$SIGN_ID"; then
     echo "No '$SIGN_ID' codesigning identity in keychain — falling back to ad-hoc." >&2
     echo "  TCC grants will be lost on every rebuild. See build.sh comments." >&2
     SIGN_ID="-"

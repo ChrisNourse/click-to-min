@@ -21,7 +21,7 @@ let package = Package(
             dependencies: ["ClickToMinCore"],
             path: "Sources/ClickToMin",
             exclude: ["Core"],
-            sources: ["AppDelegate.swift", "DockWatcher.swift", "MenuBuilder.swift", "IO"]
+            sources: ["AppDelegate.swift", "DockWatcher.swift", "MenuBuilder.swift", "TestClickSpec.swift", "IO"]
         ),
         .testTarget(
             name: "ClickToMinTests",

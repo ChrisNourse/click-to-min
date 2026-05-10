@@ -1,29 +1,23 @@
 #!/usr/bin/env bash
-# qa/05-perf-instruments.sh — Instruments-backed perf probes.
+# qa/05-perf-instruments.sh — performance probes (no Xcode required).
 #
-# Runs:
-#   1. Idle RSS sample (5 min): ps -o rss once/sec; compute mean, peak.
-#   2. xctrace Time Profiler: 30s capture during 1000 synthetic clicks
-#      outside the Dock; report whether ClickToMin symbols appear in the
-#      top-N and aggregate CPU weight.
-#   3. xctrace Allocations: 500-click run, report persistent byte growth.
+# Measures:
+#   1. Idle RSS + CPU% (5 min sample via ps)
+#   2. Idle wake-ups/sec (via top)
+#   3. Active-CPU tap overhead p50 (via os_log instrumentation)
 #
-# Runtime: ~7 min. Not CI-safe; runs locally on request.
+# Runtime: ~5.5 min. Not CI-safe (needs Accessibility).
 #
-# Usage: ./qa/05-perf-instruments.sh [--output FILE] [--idle-seconds N]
+# Usage: ./qa/suites/05-perf-instruments.sh [--output FILE] [--idle-seconds N]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/../lib/common.sh"
-# shellcheck source=lib/xctrace-parse.sh
-source "$SCRIPT_DIR/lib/xctrace-parse.sh"
 
 OUTPUT=""
 IDLE_SECONDS=300
-CLICKS_PROFILER=1000
-CLICKS_ALLOC=500
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --output) OUTPUT="$2"; shift 2 ;;
@@ -32,13 +26,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-qa::require_cliclick
 qa::build_release
-
-if ! command -v xctrace >/dev/null 2>&1; then
-    qa::fail "xctrace not found; install Xcode"
-    exit 1
-fi
+qa::require_click_tool
 
 qa::launch_app
 trap 'qa::quit_app' EXIT
@@ -55,8 +44,6 @@ qa::info "05: idle RSS + CPU% sampling for ${IDLE_SECONDS}s"
 RSS_FILE="$(mktemp -t clicktomin-rss)"
 CPU_FILE="$(mktemp -t clicktomin-cpu)"
 for _ in $(seq 1 "$IDLE_SECONDS"); do
-    # RSS (KB) and CPU (%). If process died, break.
-    # ps -o rss=,pcpu= prints "RSS PCPU" space-separated.
     LINE="$(ps -o rss=,pcpu= -p "$PID" 2>/dev/null | awk '{$1=$1;print}')"
     if [[ -z "$LINE" ]]; then break; fi
     RSS="${LINE%% *}"
@@ -65,21 +52,17 @@ for _ in $(seq 1 "$IDLE_SECONDS"); do
     printf "%s\n" "$CPU" >> "$CPU_FILE"
     sleep 1
 done
-STATS="$(xctrace_mem_stats < "$RSS_FILE")"
-MEAN_KB="$(awk -F'\t' '{print $1}' <<<"$STATS")"
-PEAK_KB="$(awk -F'\t' '{print $2}' <<<"$STATS")"
+MEAN_KB="$(awk 'BEGIN{s=0;n=0} {s+=$1;n++} END{if(n>0)printf "%d", s/n; else print "0"}' "$RSS_FILE")"
+PEAK_KB="$(awk 'BEGIN{m=0} {if($1+0>m)m=$1+0} END{printf "%d", m}' "$RSS_FILE")"
 MEAN_MB="$(awk -v k="$MEAN_KB" 'BEGIN{printf "%.1f", k/1024}')"
 PEAK_MB="$(awk -v k="$PEAK_KB" 'BEGIN{printf "%.1f", k/1024}')"
-# Mean CPU% across idle window.
 CPU_MEAN="$(awk 'BEGIN{s=0;n=0} {s+=$1;n++} END{if(n>0)printf "%.2f", s/n; else print "0.00"}' "$CPU_FILE")"
 CPU_PEAK="$(awk 'BEGIN{m=0} {if($1+0>m)m=$1+0} END{printf "%.2f", m}' "$CPU_FILE")"
 rm -f "$RSS_FILE" "$CPU_FILE"
 qa::info "05: idle RSS mean=${MEAN_MB}MB peak=${PEAK_MB}MB"
 qa::info "05: idle CPU mean=${CPU_MEAN}% peak=${CPU_PEAK}%"
 
-# --- 1b. Idle wake-ups/sec (idle-cpu metric) --------------------------------
-# `top -l 2 -stats pid,idlew -pid <PID>` gives idle wake-ups; the second
-# sample is a delta over the interval. Sample over ~10s and divide.
+# --- 2. Idle wake-ups/sec ----------------------------------------------------
 qa::info "05: idle wake-ups (idle-cpu) over 10s"
 WAKE_BEFORE="$(top -l 1 -stats pid,idlew -pid "$PID" 2>/dev/null | awk -v p="$PID" '$1==p {print $2}')"
 sleep 10
@@ -89,24 +72,50 @@ WAKE_AFTER="${WAKE_AFTER:-0}"
 IDLE_WAKEUPS_PER_SEC="$(awk -v a="$WAKE_AFTER" -v b="$WAKE_BEFORE" 'BEGIN{d=a-b; if(d<0)d=0; printf "%.2f", d/10.0}')"
 qa::info "05: idle wake-ups/sec = ${IDLE_WAKEUPS_PER_SEC}"
 
-# --- 1c. Active-cpu tap overhead (p50 µs) -----------------------------------
-# GlobalClickMonitor emits `tap_overhead_ns=<N>` at os_log .info on every
-# click. Fire 50 synthetic clicks at a benign location, then parse the ns
-# values from the log and compute p50 in microseconds.
-qa::info "05: active-cpu tap overhead (50 synthetic clicks)"
-for _ in $(seq 1 50); do
-    cliclick "c:10,10" >/dev/null 2>&1 || true
-    sleep 0.05
-done
-# Read the last 30s of pipeline log; extract ns values.
-TAP_NS_FILE="$(mktemp -t clicktomin-tap-ns)"
-/usr/bin/log show --style syslog --info --debug --last 30s \
-    --predicate 'subsystem == "com.click-to-min" && category == "pipeline"' 2>/dev/null \
-    | grep -oE 'tap_overhead_ns=[0-9]+' \
-    | awk -F= '{print $2}' > "$TAP_NS_FILE" || true
-TAP_SAMPLES="$(wc -l < "$TAP_NS_FILE" | awk '{print $1}')"
-if [[ "$TAP_SAMPLES" -gt 0 ]]; then
-    TAP_P50_US="$(/usr/bin/python3 - "$TAP_NS_FILE" <<'PY'
+# --- 3. Active-CPU tap overhead (p50 µs) --------------------------------------
+PERF_CLICK_COUNT=50
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    PERF_CLICK_COUNT=5
+fi
+qa::info "05: active-cpu tap overhead ($PERF_CLICK_COUNT synthetic clicks)"
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    INJECT_TIMES=""
+    qa::timeout_cmd 5 osascript -e 'tell application "Finder" to activate' >/dev/null 2>&1 || true
+    sleep 0.5
+    DOCK_FRAME="$(/usr/local/bin/axprobe dock-item-frame com.apple.Finder 2>/dev/null || "$PROJECT_ROOT/qa/harness/AXProbe/.build/release/axprobe" dock-item-frame com.apple.Finder 2>/dev/null || true)"
+    if [[ -n "$DOCK_FRAME" ]]; then
+        eval "$DOCK_FRAME"
+        CLICK_X="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
+        CLICK_Y="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+        for _ in $(seq 1 "$PERF_CLICK_COUNT"); do
+            qa::timeout_cmd 5 osascript -e 'tell application "Finder" to activate' >/dev/null 2>&1 || true
+            sleep 0.1
+            qa::dock_click
+            if [[ "$QA_INJECT_RESULT" == done:timing_ms=* ]]; then
+                local_ms="${QA_INJECT_RESULT#done:timing_ms=}"
+                INJECT_TIMES="${INJECT_TIMES}${local_ms}\n"
+            fi
+        done
+    fi
+    TAP_SAMPLES="$(printf '%b' "$INJECT_TIMES" | sed '/^$/d' | wc -l | awk '{print $1}')"
+    if [[ "$TAP_SAMPLES" -gt 0 ]]; then
+        TAP_P50_US="$(printf '%b' "$INJECT_TIMES" | sed '/^$/d' | sort -n | awk -v n="$TAP_SAMPLES" 'BEGIN{k=int(n*0.5); if(k<1)k=1} NR==k{printf "%.2f", $1*1000; exit}')"
+    else
+        TAP_P50_US="0.00"
+    fi
+else
+    for _ in $(seq 1 "$PERF_CLICK_COUNT"); do
+        cliclick "c:10,10" >/dev/null 2>&1 || true
+        sleep 0.05
+    done
+    TAP_NS_FILE="$(mktemp -t clicktomin-tap-ns)"
+    /usr/bin/log show --style syslog --info --debug --last 30s \
+        --predicate 'subsystem == "com.click-to-min" && category == "pipeline"' 2>/dev/null \
+        | grep -oE 'tap_overhead_ns=[0-9]+' \
+        | awk -F= '{print $2}' > "$TAP_NS_FILE" || true
+    TAP_SAMPLES="$(wc -l < "$TAP_NS_FILE" | awk '{print $1}')"
+    if [[ "$TAP_SAMPLES" -gt 0 ]]; then
+        TAP_P50_US="$(/usr/bin/python3 - "$TAP_NS_FILE" <<'PY'
 import sys, statistics
 vals = []
 with open(sys.argv[1]) as f:
@@ -121,120 +130,14 @@ else:
     print(f"{p50_ns/1000.0:.2f}")
 PY
     )"
-else
-    TAP_P50_US="0.00"
+    else
+        TAP_P50_US="0.00"
+    fi
+    rm -f "$TAP_NS_FILE"
 fi
-rm -f "$TAP_NS_FILE"
 qa::info "05: tap overhead p50 = ${TAP_P50_US}µs (${TAP_SAMPLES} samples)"
 
-# --- xctrace availability check -----------------------------------------------
-HAVE_XCTRACE=1
-if ! xctrace version >/dev/null 2>&1; then
-    qa::warn "xctrace not available (requires full Xcode, not just CLT)"
-    qa::warn "skipping Time Profiler and Allocations phases"
-    HAVE_XCTRACE=0
-fi
-
-# --- 2a. xctrace Time Profiler: OUTSIDE Dock --------------------------------
-if [[ "$HAVE_XCTRACE" -eq 1 ]]; then
-qa::info "05: xctrace Time Profiler ($CLICKS_PROFILER clicks outside Dock)"
-TRACE_DIR="$(mktemp -d -t clicktomin-trace)"
-TRACE_TP_OUT="$TRACE_DIR/tp-out.trace"
-xctrace record --template 'Time Profiler' --attach "$PID" --output "$TRACE_TP_OUT" \
-    --time-limit 30s >/dev/null 2>&1 &
-XPID=$!
-# Drive synthetic clicks at a benign screen location (top-left corner).
-for _ in $(seq 1 "$CLICKS_PROFILER"); do
-    cliclick "c:10,10" >/dev/null 2>&1 || true
-done
-wait "$XPID" 2>/dev/null || true
-
-TP_EXPORT_OUT="$TRACE_DIR/tp-out.txt"
-xctrace export --input "$TRACE_TP_OUT" --xpath '//trace-toc/run/data/table[@schema="time-profile"]' \
-    > "$TP_EXPORT_OUT" 2>/dev/null || true
-
-HOTSPOT_OUT=""
-if [[ -s "$TP_EXPORT_OUT" ]]; then
-    HOTSPOT_OUT="$(xctrace_parse_time_profiler "$TP_EXPORT_OUT" 10 || true)"
-fi
-CLICKTOMIN_OUT="no"
-if grep -q 'ClickToMin' <<<"$HOTSPOT_OUT"; then
-    CLICKTOMIN_OUT="yes"
-fi
-qa::info "05: ClickToMin in top-10 hotspots (outside Dock): $CLICKTOMIN_OUT"
-
-# --- 2b. xctrace Time Profiler: INSIDE Dock ---------------------------------
-# Click the Dock center to exercise the AX hit-test path. Use axprobe to find
-# a Dock item, falling back to an approximate bottom-center coordinate.
-qa::info "05: xctrace Time Profiler ($CLICKS_PROFILER clicks inside Dock)"
-
-# Get main screen size for Dock region estimate (bottom-center).
-SCREEN_W="$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null | awk -F', ' '{print $3+0}')"
-SCREEN_H="$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null | awk -F', ' '{print $4+0}')"
-DOCK_X="${SCREEN_W:-800}"
-DOCK_X=$((DOCK_X / 2))
-DOCK_Y="${SCREEN_H:-600}"
-DOCK_Y=$((DOCK_Y - 30))
-
-TRACE_TP_IN="$TRACE_DIR/tp-in.trace"
-xctrace record --template 'Time Profiler' --attach "$PID" --output "$TRACE_TP_IN" \
-    --time-limit 30s >/dev/null 2>&1 &
-XPID=$!
-# Right-click so we don't actually minimize anything during profiling.
-for _ in $(seq 1 "$CLICKS_PROFILER"); do
-    cliclick "rc:$DOCK_X,$DOCK_Y" >/dev/null 2>&1 || true
-done
-wait "$XPID" 2>/dev/null || true
-
-TP_EXPORT_IN="$TRACE_DIR/tp-in.txt"
-xctrace export --input "$TRACE_TP_IN" --xpath '//trace-toc/run/data/table[@schema="time-profile"]' \
-    > "$TP_EXPORT_IN" 2>/dev/null || true
-
-HOTSPOT_IN=""
-if [[ -s "$TP_EXPORT_IN" ]]; then
-    HOTSPOT_IN="$(xctrace_parse_time_profiler "$TP_EXPORT_IN" 10 || true)"
-fi
-CLICKTOMIN_IN="no"
-if grep -q 'ClickToMin' <<<"$HOTSPOT_IN"; then
-    CLICKTOMIN_IN="yes"
-fi
-qa::info "05: ClickToMin in top-10 hotspots (inside Dock): $CLICKTOMIN_IN"
-
-# Kept for backward-compat with report.sh's older key.
-CLICKTOMIN_PRESENT="$CLICKTOMIN_OUT"
-
-# --- 3. xctrace Allocations --------------------------------------------------
-qa::info "05: xctrace Allocations ($CLICKS_ALLOC clicks outside Dock)"
-TRACE_ALLOC="$TRACE_DIR/alloc.trace"
-xctrace record --template 'Allocations' --attach "$PID" --output "$TRACE_ALLOC" \
-    --time-limit 30s >/dev/null 2>&1 &
-XPID=$!
-for _ in $(seq 1 "$CLICKS_ALLOC"); do
-    cliclick "c:10,10" >/dev/null 2>&1 || true
-done
-wait "$XPID" 2>/dev/null || true
-
-ALLOC_EXPORT="$TRACE_DIR/alloc.txt"
-xctrace export --input "$TRACE_ALLOC" --xpath '//trace-toc/run/data/table[@schema="all-allocations"]' \
-    > "$ALLOC_EXPORT" 2>/dev/null || true
-
-PERSISTENT_BYTES=0
-if [[ -s "$ALLOC_EXPORT" ]]; then
-    PERSISTENT_BYTES="$(xctrace_parse_allocations "$ALLOC_EXPORT" || echo 0)"
-fi
-GROWTH_KB="$(awk -v b="$PERSISTENT_BYTES" 'BEGIN{printf "%.1f", b/1024}')"
-qa::info "05: persistent growth over $CLICKS_ALLOC clicks: ${GROWTH_KB}KB"
-
-rm -rf "$TRACE_DIR"
-
-else
-    # No xctrace — set defaults for output
-    CLICKTOMIN_OUT="skipped"
-    CLICKTOMIN_IN="skipped"
-    CLICKTOMIN_PRESENT="skipped"
-    GROWTH_KB="0.0"
-fi
-
+# --- Output -------------------------------------------------------------------
 if [[ -n "$OUTPUT" ]]; then
     {
         printf "PASS\n"
@@ -242,11 +145,6 @@ if [[ -n "$OUTPUT" ]]; then
         printf "idle_rss_peak_mb=%s\n" "$PEAK_MB"
         printf "idle_cpu_mean_pct=%s\n" "$CPU_MEAN"
         printf "idle_cpu_peak_pct=%s\n" "$CPU_PEAK"
-        printf "top10_hotspot_clicktomin=%s\n" "$CLICKTOMIN_PRESENT"
-        printf "hotspot_outside_dock=%s\n" "$CLICKTOMIN_OUT"
-        printf "hotspot_inside_dock=%s\n" "$CLICKTOMIN_IN"
-        printf "alloc_persistent_kb=%s\n" "$GROWTH_KB"
-        # --- metrics.sh keys (schema: thresholds.json) ---
         printf "memory_mb=%s\n" "$MEAN_MB"
         printf "idle_cpu_wakeups_per_sec=%s\n" "$IDLE_WAKEUPS_PER_SEC"
         printf "active_cpu_tap_overhead_us_p50=%s\n" "$TAP_P50_US"

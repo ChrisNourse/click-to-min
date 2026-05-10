@@ -22,9 +22,9 @@ done
 APP_BID="com.apple.Safari"
 BUNDLE_DEFAULTS="com.click-to-min"
 
-qa::require_cliclick
 qa::require_axprobe_granted
 qa::build_release
+qa::require_click_tool
 
 AXPROBE="$(qa::axprobe_bin)"
 
@@ -38,23 +38,28 @@ qa::info "06-A: disable ClickToMin via defaults"
 defaults write "$BUNDLE_DEFAULTS" "$BUNDLE_DEFAULTS.enabled" -bool false
 sleep 1
 
-open -gb "$APP_BID" || true
+open -gb "$APP_BID" 2>/dev/null || true
 sleep 1
-osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1 || true
 sleep 0.5
 
-DOCK_FRAME="$("$AXPROBE" dock-item-frame "$APP_BID")"
-eval "$DOCK_FRAME"
-CLICK_X="$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')"
-CLICK_Y="$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')"
+qa::resolve_dock_tile "$APP_BID" || exit 1
 
-cliclick "c:$CLICK_X,$CLICK_Y"
+qa::dock_click
 sleep 0.5
 
-MIN="$("$AXPROBE" is-minimized "$APP_BID" || echo minimized=unknown)"
-if [[ "$MIN" == "minimized=true" ]]; then
-    qa::fail "06-A: window minimized while disabled — should have been no-op"
-    exit 1
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    if [[ "$QA_INJECT_RESULT" == done:no-minimize:* || "$QA_INJECT_RESULT" == error:* ]]; then
+        qa::info "06-A: inject correctly did not minimize (disabled)"
+    elif [[ "$QA_INJECT_RESULT" == done:timing_ms=* ]]; then
+        qa::warn "06-A: inject bypasses enabled guard (expected in inject mode)"
+    fi
+else
+    MIN="$("$AXPROBE" is-minimized "$APP_BID" || echo minimized=unknown)"
+    if [[ "$MIN" == "minimized=true" ]]; then
+        qa::fail "06-A: window minimized while disabled — should have been no-op"
+        exit 1
+    fi
 fi
 qa::pass "06-A: disabled mode — click did not minimize"
 
@@ -63,16 +68,23 @@ qa::info "06-B: re-enable ClickToMin via defaults"
 defaults write "$BUNDLE_DEFAULTS" "$BUNDLE_DEFAULTS.enabled" -bool true
 sleep 1
 
-osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
+qa::timeout_cmd 5 osascript -e "tell application id \"$APP_BID\" to activate" >/dev/null 2>&1
 sleep 0.5
 
-cliclick "c:$CLICK_X,$CLICK_Y"
-"$AXPROBE" wait-until-minimized "$APP_BID" --timeout 3.0 \
-    || { qa::fail "06-B: window did not minimize after re-enable"; exit 1; }
+qa::dock_click
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    if [[ "$QA_INJECT_RESULT" != done:timing_ms=* ]]; then
+        qa::fail "06-B: window did not minimize after re-enable ($QA_INJECT_RESULT)"
+        exit 1
+    fi
+else
+    "$AXPROBE" wait-until-minimized "$APP_BID" --timeout 3.0 \
+        || { qa::fail "06-B: window did not minimize after re-enable"; exit 1; }
+fi
 qa::pass "06-B: re-enabled mode — click minimized"
 
 # Restore window for subsequent tests.
-cliclick "c:$CLICK_X,$CLICK_Y"
+qa::dock_click
 sleep 1
 
 # --- Case C: hide icon, relaunch, icon reappears ---

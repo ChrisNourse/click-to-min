@@ -28,10 +28,11 @@ REPAIR_TOOLCHAIN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --ci) MODE="CI-SUBSET"; shift ;;
+        --inject) export QA_CLICK_MODE="inject"; shift ;;
         --log-file) LOG_FILE="$2"; shift 2 ;;
         --repair-toolchain) REPAIR_TOOLCHAIN=1; shift ;;
         -h|--help)
-            printf "Usage: %s [--ci] [--log-file PATH] [--repair-toolchain]\n" "$0"
+            printf "Usage: %s [--ci] [--inject] [--log-file PATH] [--repair-toolchain]\n" "$0"
             exit 0
             ;;
         *) qa::fail "unknown flag: $1"; exit 1 ;;
@@ -81,6 +82,8 @@ qa::step $((++STEP)) "$TOTAL_STEPS" "Accessibility permission gate"
 # ungrantable hosted runner.
 if [[ "$MODE" == "CI-SUBSET" ]]; then
     qa::info "CI-SUBSET mode: skipping interactive AX gate"
+elif [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    qa::info "inject mode: skipping interactive AX gate (inject bypasses event tap)"
 else
     qa::require_accessibility
 fi
@@ -117,17 +120,39 @@ run_suite() {
 
 OVERALL="PASS"
 
+INJECT_ARGS=()
+INJECT_ARGS=()
+INJECT_ARGS_02=()
+if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+    INJECT_ARGS=(--app com.apple.TextEdit)
+    INJECT_ARGS_02=(--app com.apple.TextEdit --trials 5)
+fi
+
+fail_fast() {
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::fail "fail-fast: aborting remaining suites"
+        OVERALL="FAIL"
+        return 1
+    fi
+    OVERALL="FAIL"
+    return 0
+}
+
 # Suite 01 — always.
-if ! run_suite 01-smoke.sh "Smoke: build / bundle / signposts"; then OVERALL="FAIL"; fi
+if ! run_suite 01-smoke.sh "Smoke: build / bundle / signposts"; then fail_fast || exit 1; fi
 
 if [[ "$MODE" == "FULL" ]]; then
-    # AX-dependent + perf suites only in full mode.
-    if ! run_suite 00-startup.sh       "Startup: cold launch -> first lifecycle log"; then OVERALL="FAIL"; fi
-    if ! run_suite 02-core-behavior.sh "Core behavior: 3-click cycle + latency"; then OVERALL="FAIL"; fi
-    if ! run_suite 03-edge-cases.sh    "Edge cases: frozen/debounce/multi-window"; then OVERALL="FAIL"; fi
-    if ! run_suite 04-dock-config.sh   "Dock config: tilesize/orientation/autohide"; then OVERALL="FAIL"; fi
-    if ! run_suite 05-perf-instruments.sh "Perf: xctrace + idle-cpu + active-cpu"; then OVERALL="FAIL"; fi
-    if ! run_suite 06-settings.sh "Settings: enable/disable + icon-hide toggles"; then OVERALL="FAIL"; fi
+    if ! run_suite 00-startup.sh       "Startup: cold launch -> first lifecycle log"; then fail_fast || exit 1; fi
+    if ! run_suite 02-core-behavior.sh "Core behavior: 3-click cycle + latency" ${INJECT_ARGS_02[@]+"${INJECT_ARGS_02[@]}"}; then fail_fast || exit 1; fi
+    if ! run_suite 03-edge-cases.sh    "Edge cases: frozen/debounce/multi-window" ${INJECT_ARGS[@]+"${INJECT_ARGS[@]}"}; then fail_fast || exit 1; fi
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::step $((++STEP)) "$TOTAL_STEPS" "Dock config: tilesize/orientation/autohide (04-dock-config.sh)"
+        qa::info "skipped in inject mode (tests runtime Dock-restart detection, requires persistent process)"
+    else
+        if ! run_suite 04-dock-config.sh   "Dock config: tilesize/orientation/autohide" ${INJECT_ARGS[@]+"${INJECT_ARGS[@]}"}; then fail_fast || exit 1; fi
+    fi
+    if ! run_suite 05-perf-instruments.sh "Perf: xctrace + idle-cpu + active-cpu" --idle-seconds 10; then fail_fast || exit 1; fi
+    if ! run_suite 06-settings.sh "Settings: enable/disable + icon-hide toggles"; then fail_fast || exit 1; fi
 
     # --- Metrics pipeline: aggregate, record, classify, publish ------------
     qa::step $((++STEP)) "$TOTAL_STEPS" "Recording perf metrics"
@@ -150,7 +175,9 @@ if [[ "$MODE" == "FULL" ]]; then
     fi
 
     qa::step $((++STEP)) "$TOTAL_STEPS" "Regression guard"
-    if ! qa::metrics_regression_guard; then
+    if [[ "$QA_CLICK_MODE" == "inject" ]]; then
+        qa::info "skipped in inject mode (short idle window makes memory/perf comparisons unreliable)"
+    elif ! qa::metrics_regression_guard; then
         OVERALL="FAIL"
         /usr/bin/sed -i '' '1s/^# /# REGRESSION - /' "$REPORT_MD"
         qa::fail "perf regression vs last green baseline"
