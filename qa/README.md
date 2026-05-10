@@ -1,109 +1,130 @@
-# qa/ — ClickToMin QA Automation
+# qa/ — ClickToMin QA Testing
 
-One-command test runner for the full ClickToMin QA suite. Tests run in a macOS
-VM via UTM to avoid disrupting your workspace.
+## Overview
 
-## Quick Start
+ClickToMin has three test layers:
+
+| Layer | Where | What it tests |
+|-------|-------|---------------|
+| Unit tests | `swift test` (CI, macos-14) | Core logic with fakes (pipeline, geometry, debounce) |
+| Integration test | CI (macos-26) | Real pipeline end-to-end via `--test-click` |
+| Full QA suite | Local VM | Real mouse clicks via cliclick, all edge cases |
+
+CI tests run automatically on every PR and block releases. The full QA suite
+runs locally/on-VM for comprehensive validation including timing, performance,
+and visual verification.
+
+## CI Integration Test
+
+Runs on `macos-26` GitHub-hosted runner. Tests the real pipeline (AX hit test,
+PID match, URL match, debounce, actual minimize) without synthetic HID events.
 
 ```bash
-./qa/run.sh                # boot VM, sync, run all suites, fetch report
-./qa/run.sh --ci           # CI-safe subset only (no VM needed)
-./qa/run.sh --keep-alive   # leave VM running after
-./qa/run.sh --skip-sync    # don't rsync to VM
+# What CI runs:
+scripts/ci-integration-test.sh com.apple.TextEdit
+```
+
+How it works:
+1. `scripts/ci-grant-tcc.sh` grants Accessibility/ListenEvent/PostEvent/ScreenCapture
+   to ClickToMin and AXProbe using csreq blobs (required for TCC runtime validation)
+2. Launches target app (TextEdit), finds its Dock tile via AXProbe
+3. Launches ClickToMin with `--test-click X,Y` (AX coordinates of Dock tile center)
+4. App's pipeline receives the injected click and minimizes the window
+5. AXProbe verifies the window actually minimized
+
+This catches any break in: coordinate handling, Dock geometry, AX queries,
+PID/URL matching, debounce logic, or the minimize call itself.
+
+## Full QA Suite (Local/VM)
+
+One-command test runner using real mouse events. Run before releases for
+comprehensive validation including timing and performance.
+
+```bash
+./qa/suites/run-all.sh             # full local run (suites 00..06)
+./qa/suites/run-all.sh --ci        # CI-safe subset only (01-smoke)
 ```
 
 Reports land in `qa/reports/<timestamp>.md` with inline metrics and warnings.
 
-## First-Time VM Setup
+### VM Setup (first time)
 
-### 1. Create VM in UTM
+1. Create VM in UTM: Virtualize → macOS, 8 GB RAM, 4 cores, 64 GB disk
+2. Create user `tester`, enable Remote Login (SSH)
+3. `ssh-copy-id tester@<IP>` from host
+4. Run bootstrap: `scp qa/vm-setup/bootstrap.sh tester@<IP>:~/ && ssh tester@<IP> "chmod +x ~/bootstrap.sh && ~/bootstrap.sh"`
+5. Grant Accessibility on VM to: ClickToMin.app, AXProbe.app, cliclick, Terminal.app
+6. `export QA_SSH_HOST="tester@<IP>"`
 
-1. Open UTM → Create New → Virtualize → macOS
-2. Let it download the IPSW (or select one manually)
-3. Config: **8 GB RAM**, **4 cores**, **64 GB disk**
-4. Name: `macOS` (or set `QA_VM_NAME` env var)
-5. Boot, create user `tester`, skip Apple ID/Siri/Screen Time
+### Suites
 
-### 2. Enable SSH
+| Script | What | Needs AX? |
+|--------|------|-----------|
+| 00-startup | Cold launch timing | Yes |
+| 01-smoke | Build, codesign, signposts | No |
+| 02-core-behavior | 3-click cycle + latency | Yes |
+| 03-edge-cases | Frozen app, debounce, multi-window, modifiers | Yes |
+| 04-dock-config | Tile size, orientation, auto-hide | Yes |
+| 05-perf-instruments | RSS, CPU, tap overhead, xctrace | Yes |
+| 06-settings | Enable/disable toggle, icon-hide | Yes |
 
-On the VM: System Settings → General → Sharing → **Remote Login** ON.
+## Manual Checklist
 
-Find the VM's IP — open Terminal on the VM and run:
-```bash
-ipconfig getifaddr en0
-```
-It will be something like `192.168.64.x` (UTM shared networking uses this range).
+Items that cannot be automated. Run before every release tag.
 
-From your host, copy your SSH key:
-```bash
-ssh-copy-id tester@192.168.64.x   # replace x with the IP from above
-```
+### M1 — First-grant flow
 
-Verify passwordless login works:
-```bash
-ssh tester@192.168.64.x "echo ok"
-```
+1. Remove ClickToMin from Accessibility settings
+2. Launch — should show "permission missing, polling started" in logs
+3. Grant Accessibility
+4. Within 5s: "permission granted, DockWatcher installed" + "global click monitor installed"
+5. Dock-click a frontmost app's tile → minimizes
 
-### 3. Run Bootstrap
+### M2 — Sleep/wake cycle
 
-```bash
-scp qa/vm-setup/bootstrap.sh tester@<IP>:~/
-ssh tester@<IP> "chmod +x ~/bootstrap.sh && ~/bootstrap.sh"
-```
+1. Verify minimize works
+2. Sleep machine ≥60s, wake
+3. Dock-click same app → must minimize within 500ms
+4. Dock-click different app → must minimize
 
-Installs: Xcode CLT, Homebrew, cliclick, AXProbe.app, ClickToMin.app.
+### M3 — Display hot-plug
 
-NOTE: CLT install pops a dialog on the VM screen — click "Install"/"Agree".
+1. Attach/detach external display (or change resolution)
+2. Dock-click a tile without relaunching → must minimize
+3. Logs should show "dock frame refreshed"
 
-### 4. Grant Accessibility (one-time, on VM screen)
+### M4 — Hide icon + relaunch
 
-System Settings → Privacy & Security → Accessibility → add ALL:
-- `/Applications/AXProbe.app`
-- `~/click-to-min/ClickToMin.app`
-- `/opt/homebrew/bin/cliclick`
-- `/System/Applications/Utilities/Terminal.app`
+1. Hide menu bar icon via toggle
+2. Open ClickToMin.app from Applications
+3. Icon reappears within 2s, all menu items functional
 
-Also click "Allow" on any popup dialogs asking to control the computer.
+### M5 — Clean brew install
 
-### 5. Update QA_SSH_HOST
+1. `brew install --cask chrisnourse/clicktomin/click-to-min`
+2. Launch — no Gatekeeper warning
+3. Accessibility prompt fires normally
 
-Set the VM IP in your shell so `run.sh` connects to the right place:
-```bash
-export QA_SSH_HOST="tester@192.168.64.x"
-```
+### M6 — Brew upgrade preserves TCC
 
-Or add it to your `.zshrc`/`.bashrc` to persist across sessions.
+1. Install, grant Accessibility, verify minimize works
+2. `brew upgrade --cask click-to-min`
+3. Must work without re-granting Accessibility
 
-Done. `./qa/run.sh` works from now on.
+### M7 — Codesign identity stable
 
-## Suites
-
-| Script | What | Needs AX? | Needs Xcode? |
-|--------|------|-----------|--------------|
-| 00-startup | Cold launch timing | Yes | No |
-| 01-smoke | Build, codesign, signposts | No | No |
-| 02-core-behavior | 3-click cycle + latency | Yes | No |
-| 03-edge-cases | Frozen app, debounce, multi-window, modifiers | Yes | No |
-| 04-dock-config | Tile size, orientation, auto-hide | Yes | No |
-| 05-perf-instruments | RSS, CPU, tap overhead, xctrace | Yes | xctrace only |
-| 06-settings | Enable/disable toggle, icon-hide | Yes | No |
+1. `codesign -dvv /Applications/ClickToMin.app 2>&1 | grep -E "Authority|Identifier"`
+2. After upgrade, same Identifier and Authority
 
 ## Metrics
 
-Performance thresholds and history are in `qa/metrics/thresholds.json`.
-See that file for green/orange/red classification values.
-
-## CI
-
-The `qa-smoke` job in `.github/workflows/ci.yml` runs on every PR:
-- Builds AXProbe
-- Runs `01-smoke.sh` (no Accessibility needed)
+Performance thresholds in `qa/metrics/thresholds.json`. History in
+`qa/metrics/history.jsonl` (append-only, informational).
 
 ## Troubleshooting
 
 - **VM won't start**: UTM must be open (AppleScript needs it running)
 - **SSH timeout**: `export QA_SSH_TIMEOUT=120`
-- **TCC revoked after rebuild**: The skip-rebuild logic in `lib/common.sh`
-  prevents this. If it happens, re-grant ClickToMin.app in System Settings.
-- **xctrace errors**: Requires full Xcode. Suite skips gracefully with CLT only.
-- **cliclick permission**: Grant `/System/Applications/Utilities/Terminal.app` Accessibility on the VM.
+- **TCC revoked after rebuild**: skip-rebuild logic in `lib/common.sh` prevents this
+- **xctrace errors**: requires full Xcode; suite skips gracefully with CLT only
+- **CI integration test fails**: check `scripts/ci-grant-tcc.sh` output for TCC grant issues
