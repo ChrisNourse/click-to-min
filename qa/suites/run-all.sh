@@ -14,12 +14,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QA_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+source "$QA_DIR/lib/common.sh"
 # shellcheck source=lib/report.sh
-source "$SCRIPT_DIR/lib/report.sh"
+source "$QA_DIR/lib/report.sh"
 # shellcheck source=lib/metrics.sh
-source "$SCRIPT_DIR/lib/metrics.sh"
+source "$QA_DIR/lib/metrics.sh"
 
 MODE="FULL"
 LOG_FILE=""

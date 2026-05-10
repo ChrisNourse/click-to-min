@@ -153,7 +153,7 @@ jobs:
         run: swift test --package-path qa/harness/AXProbe
 
       - name: Run CI-safe QA subset
-        run: ./qa/run-all.sh --ci
+        run: ./qa/suites/run-all.sh --ci
 
       - name: Upload QA report on failure
         if: failure()

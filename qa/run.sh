@@ -10,10 +10,10 @@
 #   - SSH key copied to VM (ssh-copy-id)
 #
 # Usage:
-#   ./qa/remote-run.sh              # full suite
-#   ./qa/remote-run.sh --ci         # CI-safe subset only
-#   ./qa/remote-run.sh --keep-alive # don't stop VM after run
-#   ./qa/remote-run.sh --skip-sync  # don't git pull on VM
+#   ./qa/run.sh              # full suite
+#   ./qa/run.sh --ci         # CI-safe subset only
+#   ./qa/run.sh --keep-alive # don't stop VM after run
+#   ./qa/run.sh --skip-sync  # don't rsync to VM
 
 set -euo pipefail
 
@@ -131,7 +131,7 @@ fi
 
 info "running QA suite${MODE:+ ($MODE)}..."
 REMOTE_RC=0
-REMOTE_OUTPUT="$(remote "eval \"\$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)\" && cd $QA_REMOTE_DIR && ./qa/run-all.sh $MODE 2>&1" || true)"
+REMOTE_OUTPUT="$(remote "eval \"\$(/opt/homebrew/bin/brew shellenv 2>/dev/null || true)\" && cd $QA_REMOTE_DIR && ./qa/suites/run-all.sh $MODE 2>&1" || true)"
 REMOTE_RC=$?
 
 printf "%s\n" "$REMOTE_OUTPUT"

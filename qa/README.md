@@ -1,63 +1,133 @@
-# qa/ — ClickToMin QA automation
+# qa/ — ClickToMin QA Automation
 
-Scripted replacement for the manual Layer 2/3 checklist. Produces a
-timestamped markdown report per run and can update `PERF.md` in place.
+One-command test runner for the full ClickToMin QA suite. Tests run in a macOS
+VM via UTM to avoid disrupting your workspace.
 
-## Prereqs
+## Quick Start
 
-- macOS 13+ workstation (matches `CI` runner `macos-14`)
-- Xcode Command Line Tools
-- `cliclick` — `brew install cliclick`
-- Accessibility granted to **both**:
-  1. `ClickToMin.app` (project root; built by `./build.sh`)
-  2. `qa/harness/AXProbe/.build/release/axprobe` (built by `swift build -c release --package-path qa/harness/AXProbe`)
+```bash
+./qa/run.sh                # boot VM, sync, run all suites, fetch report
+./qa/run.sh --ci           # CI-safe subset only (no VM needed)
+./qa/run.sh --keep-alive   # leave VM running after
+./qa/run.sh --skip-sync    # don't rsync to VM
+```
 
-System Settings → Privacy & Security → Accessibility → `+` → add both binaries.
+Reports land in `qa/reports/<timestamp>.md` with inline metrics and warnings.
 
-The preflight in `qa/lib/common.sh` prints the exact grant path if either
-binary is missing permission.
+## First-Time VM Setup
+
+### 1. Create VM in UTM
+
+1. Open UTM → Create New → Virtualize → macOS
+2. Let it download the IPSW (or select one manually)
+3. Config: **8 GB RAM**, **4 cores**, **64 GB disk**
+4. Name: `macOS` (or set `QA_VM_NAME` env var)
+5. Boot, create user `tester`, skip Apple ID/Siri/Screen Time
+
+### 2. Enable SSH
+
+On the VM: System Settings → General → Sharing → **Remote Login** ON.
+
+From host:
+```bash
+ssh-copy-id tester@$(ipconfig getifaddr en0)  # VM's IP, usually 192.168.64.x
+```
+
+### 3. Run Bootstrap
+
+```bash
+scp qa/vm-setup/bootstrap.sh tester@<IP>:~/
+ssh tester@<IP> "chmod +x ~/bootstrap.sh && ~/bootstrap.sh"
+```
+
+Installs: Xcode CLT, Homebrew, cliclick, AXProbe.app, ClickToMin.app.
+
+NOTE: CLT install pops a dialog on the VM screen — click "Install"/"Agree".
+
+### 4. Grant Accessibility (one-time, on VM screen)
+
+System Settings → Privacy & Security → Accessibility → add ALL:
+- `/Applications/AXProbe.app`
+- `~/click-to-min/ClickToMin.app`
+- `/opt/homebrew/bin/cliclick`
+- Terminal.app
+
+Also click "Allow" on any popup dialogs asking to control the computer.
+
+### 5. Snapshot
+
+Right-click VM in UTM → Take Snapshot → name it `qa-ready`.
+
+Done. `./qa/run.sh` works from now on.
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QA_VM_NAME` | `macOS` | UTM virtual machine name |
+| `QA_SSH_HOST` | `tester@192.168.64.5` | SSH user@host |
+| `QA_SSH_KEY` | (agent) | SSH private key path |
+| `QA_SSH_TIMEOUT` | `90` | Seconds to wait for SSH after boot |
+| `QA_REMOTE_DIR` | `~/click-to-min` | Repo path on VM |
+
+## Suites
+
+| Script | What | Needs AX? | Needs Xcode? |
+|--------|------|-----------|--------------|
+| 00-startup | Cold launch timing | Yes | No |
+| 01-smoke | Build, codesign, signposts | No | No |
+| 02-core-behavior | 3-click cycle + latency | Yes | No |
+| 03-edge-cases | Frozen app, debounce, multi-window, modifiers | Yes | No |
+| 04-dock-config | Tile size, orientation, auto-hide | Yes | No |
+| 05-perf-instruments | RSS, CPU, tap overhead, xctrace | Yes | xctrace only |
+| 06-settings | Enable/disable toggle, icon-hide | Yes | No |
+
+## Metrics
+
+Performance metrics are recorded in `qa/metrics/history.jsonl` and classified
+against thresholds in `qa/metrics/thresholds.json`:
+
+| Metric | Green | Orange | Red |
+|--------|-------|--------|-----|
+| startup | <1000ms | 1-2s | >2s |
+| memory | <40MB | 40-80MB | >80MB |
+| idle-cpu | <1 wake/s | 1-10 | >10 |
+| tap-overhead | <100us | 100-500us | >500us |
+| latency | <250ms | 250-500ms | >500ms |
 
 ## Layout
 
 ```
 qa/
-  lib/            shared bash helpers (common.sh, report.sh, xctrace-parse.sh)
-  harness/AXProbe Swift CLI that queries AX state for assertions
-  reports/        timestamped run reports (gitignored)
-  01-smoke.sh     CI-safe: build / bundle / plist / signpost smoke
-  02-core-behavior.sh   3-click cycle vs Safari (AX-dependent)
-  03-edge-cases.sh      frozen app, debounce, multi-window, etc.
-  04-dock-config.sh     Dock resize / move / auto-hide (AX-dependent)
-  05-perf-instruments.sh xctrace Time Profiler + Allocations
-  run-all.sh      orchestrator + report writer + PERF.md updater
-  MANUAL-CHECKLIST.md    three items that can't be scripted
+├── run.sh              host-side orchestrator (UTM + rsync + SSH)
+├── README.md           this file
+├── MANUAL-CHECKLIST.md non-automatable items (sleep/wake, display hot-plug)
+├── suites/             test scripts + orchestrator
+│   ├── run-all.sh      suite runner (called by run.sh on the VM)
+│   ├── 00-startup.sh .. 06-settings.sh
+├── lib/                shared bash helpers
+│   ├── common.sh       build, launch, log, assertion helpers
+│   ├── report.sh       markdown report + enrichment
+│   ├── metrics.sh      history, badges, regression guard
+│   └── xctrace-parse.sh
+├── harness/AXProbe/    Swift CLI for AX queries
+├── metrics/            thresholds + badge output
+├── reports/            timestamped run output (gitignored)
+└── vm-setup/
+    └── bootstrap.sh    first-time VM provisioning
 ```
 
-## Run
+## CI
 
-```bash
-# CI-safe subset (no Accessibility required; runs in GitHub Actions)
-./qa/run-all.sh --ci
+The `qa-smoke` job in `.github/workflows/ci.yml` runs on every PR:
+- Builds AXProbe
+- Runs `01-smoke.sh` (no Accessibility needed)
 
-# Full local run (requires Accessibility grant)
-./qa/run-all.sh
+## Troubleshooting
 
-# Populate PERF.md Baseline column (use once, at release cut)
-./qa/run-all.sh --baseline
-
-# Override the default log path (defaults to qa/reports/<ts>/run-all.log)
-./qa/run-all.sh --log-file /tmp/qa.log
-```
-
-## Reports
-
-Written to `qa/reports/<YYYY-MM-DD-HHMMSS>.md` with pass/fail per suite
-and a link to the per-suite log directory at
-`qa/reports/<YYYY-MM-DD-HHMMSS>/`.
-
-## Notes
-
-- `qa/MANUAL-CHECKLIST.md` covers the non-automatable items (first-grant
-  flow, sleep/wake, display hot-plug). Run before every release tag.
-- Scripts are shellcheck-clean. Run `shellcheck qa/lib/*.sh qa/*.sh`.
-- Pure bash + coreutils + Xcode toolchain. No jq, no python.
+- **VM won't start**: UTM must be open (AppleScript needs it running)
+- **SSH timeout**: Increase `QA_SSH_TIMEOUT=120`
+- **TCC revoked after rebuild**: The skip-rebuild logic in `lib/common.sh`
+  prevents this. If it happens, re-grant ClickToMin.app in System Settings.
+- **xctrace errors**: Requires full Xcode. Suite skips gracefully with CLT only.
+- **cliclick permission**: Grant Terminal.app Accessibility on the VM.
