@@ -22,47 +22,37 @@ jobs:
       - name: Install cliclick
         run: brew install cliclick
 
-      - name: Show TCC DB structure
-        run: |
-          echo "=== TCC DB schema ==="
-          sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" ".schema access" || echo "Cannot read TCC.db without sudo"
-          echo ""
-          echo "=== Trying with sudo ==="
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" ".schema access" || echo "sudo also failed"
-
-      - name: Grant Accessibility to built binary
+      - name: Grant TCC permissions to all binaries
         run: |
           BINARY_PATH="$(pwd)/ClickToMin.app/Contents/MacOS/ClickToMin"
-          echo "Binary: $BINARY_PATH"
-          echo ""
-          echo "=== Attempting TCC insert (kTCCServiceAccessibility) ==="
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$BINARY_PATH', 1, 2, 3, 1);" \
-            && echo "INSERT succeeded" || echo "INSERT failed"
-          echo ""
-          echo "=== Verifying grant ==="
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-            "SELECT * FROM access WHERE service='kTCCServiceAccessibility';"
-
-      - name: Test AX access (launch app + verify)
-        run: |
-          echo "=== Launching ClickToMin ==="
-          open ClickToMin.app
-          sleep 3
-          echo "=== Checking if running ==="
-          pgrep -l ClickToMin || echo "Not running"
-
-      - name: Grant Accessibility to AXProbe and cliclick
-        run: |
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
           CLICLICK="$(which cliclick)"
-          echo "AXProbe: $AXPROBE"
-          echo "cliclick: $CLICLICK"
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$AXPROBE', 1, 2, 3, 1);"
-          sudo sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('kTCCServiceAccessibility', '$CLICLICK', 1, 2, 3, 1);"
-          echo "Granted AX to axprobe + cliclick"
+          TCC_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+          echo "ClickToMin: $BINARY_PATH"
+          echo "AXProbe:    $AXPROBE"
+          echo "cliclick:   $CLICLICK"
+          echo ""
+          # Grant all three TCC services needed for GUI testing:
+          #   Accessibility — AX tree queries + control
+          #   ListenEvent  — CGEventTap receives global events (ClickToMin's tap)
+          #   PostEvent    — cliclick posts synthetic mouse events
+          for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent; do
+            for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK"; do
+              sudo sqlite3 "$TCC_DB" \
+                "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version) VALUES ('$SERVICE', '$BIN', 1, 2, 3, 1);" \
+                && echo "  $SERVICE -> $(basename "$BIN") OK" \
+                || echo "  $SERVICE -> $(basename "$BIN") FAILED"
+            done
+          done
+          echo ""
+          echo "=== All TCC grants ==="
+          sudo sqlite3 "$TCC_DB" "SELECT service, client FROM access;"
+
+      - name: Launch ClickToMin and verify
+        run: |
+          open ClickToMin.app
+          sleep 3
+          pgrep -l ClickToMin || echo "Not running"
 
       - name: Verify AX is-trusted
         run: |
