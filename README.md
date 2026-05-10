@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Resources/logo.svg" alt="ClickToMin" width="720"/>
+  <img src="Resources/logo.png" alt="ClickToMin" width="720"/>
 </p>
 
 <p align="center">
