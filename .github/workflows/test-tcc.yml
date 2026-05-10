@@ -45,7 +45,7 @@ jobs:
           echo "AXProbe:    $AXPROBE"
           echo "cliclick:   $CLICLICK"
           echo ""
-          for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent; do
+          for SERVICE in kTCCServiceAccessibility kTCCServiceListenEvent kTCCServicePostEvent kTCCServiceScreenCapture kTCCServiceDeveloperTool; do
             for BIN in "$BINARY_PATH" "$AXPROBE" "$CLICLICK"; do
               grant_tcc "$BIN" "$SERVICE"
             done
@@ -77,29 +77,38 @@ jobs:
           AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
           ls -la "$AXPROBE" || { echo "axprobe not at expected path, searching..."; AXPROBE="$(find . -path '*/AXProbe/.build/*/release/axprobe' -type f | head -1)"; }
           echo "Using: $AXPROBE"
-          # Use TextEdit instead of Safari to avoid first-run dialogs
           open -a TextEdit
           sleep 2
-          # Get Dock tile frame for TextEdit
           FRAME=$("$AXPROBE" dock-item-frame com.apple.TextEdit 2>&1) && echo "Dock frame: $FRAME" || { echo "dock-item-frame FAILED: $FRAME"; exit 1; }
           eval "$FRAME"
           CX=$(awk -v x="$x" -v w="$w" 'BEGIN{printf "%d", x + w/2}')
           CY=$(awk -v y="$y" -v h="$h" 'BEGIN{printf "%d", y + h/2}')
           echo "Click target: ($CX, $CY)"
-          # Make TextEdit frontmost
+          # First test: does cliclick even work? Click desktop to deactivate TextEdit
+          echo "--- Test A: cliclick deactivates TextEdit by clicking elsewhere ---"
+          cliclick "c:100,400"
+          sleep 1
+          FM=$("$AXPROBE" frontmost-bundle-id)
+          echo "After click elsewhere, frontmost: $FM"
+          # Reactivate TextEdit
           osascript -e 'tell application "TextEdit" to activate'
           sleep 1
           FM=$("$AXPROBE" frontmost-bundle-id)
-          echo "Frontmost before click: $FM"
-          # Click Dock tile — should trigger ClickToMin minimize
+          echo "After reactivate, frontmost: $FM"
+          echo "--- Test B: click Dock tile while TextEdit is frontmost ---"
           cliclick "c:$CX,$CY"
-          echo "Click sent, waiting for minimize..."
+          sleep 1
+          FM2=$("$AXPROBE" frontmost-bundle-id)
+          echo "After Dock click, frontmost: $FM2"
+          echo "--- Test C: wait for ClickToMin minimize ---"
           if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 3; then
             echo "SUCCESS: Window minimized!"
           else
             echo "FAILED: Window did not minimize within 3s"
             echo "=== ClickToMin logs ==="
-            log show --last 15s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -30 || true
+            log show --last 20s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -30 || true
+            echo "=== All com.click-to-min logs (no filter) ==="
+            log show --last 20s --predicate 'process == "ClickToMin"' --style syslog 2>/dev/null | tail -20 || true
             echo "=== Window state ==="
             "$AXPROBE" window-count com.apple.TextEdit 2>&1 || true
             "$AXPROBE" is-minimized com.apple.TextEdit 2>&1 || true
