@@ -56,12 +56,14 @@ jobs:
 
       - name: Launch ClickToMin and verify
         run: |
+          # Kill tccd to force it to re-read TCC.db, then launch app
+          sudo killall tccd 2>/dev/null || true
           sleep 2
           open ClickToMin.app
           sleep 5
           pgrep -l ClickToMin || echo "Not running"
           echo "=== ClickToMin lifecycle logs ==="
-          log show --last 8s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null | tail -15 || true
+          log show --last 8s --predicate 'subsystem == "com.click-to-min"' --style syslog 2>/dev/null || true
 
       - name: Verify AX is-trusted
         run: |
