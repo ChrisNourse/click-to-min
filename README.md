@@ -7,6 +7,9 @@
     <img src="../../actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
   <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ChrisNourse/68d25b7a0e169d8e38ea3a02c76bb280/raw/coverage.json" alt="coverage"/>
+  <a href="https://github.com/ChrisNourse/homebrew-clicktomin">
+    <img src="https://img.shields.io/badge/homebrew-tap-FBB040?logo=homebrew&logoColor=white" alt="Homebrew Tap"/>
+  </a>
   <img src="https://img.shields.io/badge/macOS-13%2B-lightgrey" alt="macOS 13+"/>
   <img src="https://img.shields.io/badge/Swift-5.9-orange" alt="Swift 5.9"/>
   <img src="https://img.shields.io/badge/version-0.1.0--wip-blue" alt="v0.1.0 WIP"/>
@@ -40,12 +43,14 @@ A fast-path Dock geometry check short-circuits ~99% of global clicks before any 
 
 ## Features
 
-- No configuration — grant Accessibility permission and it works
+- Works out of the box — grant Accessibility permission and go
+- **Settings menu**: enable/disable minimization, toggle menu bar icon visibility
 - Runs as a menu bar accessory (`LSUIElement`): no Dock icon, no app-switcher entry
 - Fast-path geometry check eliminates AX IPC on nearly all clicks
 - Per-item 300 ms debounce prevents accidental double-minimize
 - Works with every app on every screen
 - Handles Dock auto-hide, multi-display layouts, and Dock relaunches
+- Installs via Homebrew
 
 ## Requirements
 
@@ -54,7 +59,21 @@ A fast-path Dock geometry check short-circuits ~99% of global clicks before any 
 
 ## Installation
 
-### Download
+### Homebrew (recommended)
+
+```bash
+brew install --cask chrisnourse/clicktomin/click-to-min
+```
+
+The cask handles quarantine clearance automatically — no extra steps needed. Grant Accessibility when prompted on first launch.
+
+To update:
+
+```bash
+brew upgrade --cask click-to-min
+```
+
+### Download (manual)
 
 1. Download `ClickToMin-vX.X.X.dmg` from the [latest release](../../releases/latest)
 2. Open the DMG and drag **ClickToMin** into **Applications**
@@ -122,6 +141,18 @@ GlobalClickMonitor  (CGEventTap, session-wide)
 ```
 
 Zero live AX calls required.
+
+## Settings
+
+Right-click (or left-click) the `↓` menu bar icon to access preferences:
+
+| Setting | Effect |
+|---|---|
+| **Enable ClickToMin** | Toggle minimization on/off without quitting |
+| **Show Menu Bar Icon** | Hide the icon for a cleaner menu bar (re-launch the app to show it again) |
+| **Quit** | Exit ClickToMin |
+
+Settings persist across launches via UserDefaults.
 
 ## Development
 

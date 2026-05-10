@@ -51,7 +51,8 @@ openssl pkcs12 -export \
     -inkey "$KEY_FILE" \
     -in "$CERT_FILE" \
     -out "$P12_FILE" \
-    -name "$CERT_CN"
+    -name "$CERT_CN" \
+    -legacy
 
 echo ""
 echo "Created: $P12_FILE"

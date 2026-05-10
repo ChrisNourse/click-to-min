@@ -20,48 +20,6 @@ MAX_DIFF_CHARS = 60_000
 MODEL = "anthropic/claude-opus-4"
 AI_REVIEW_MARKER = "<!-- ai-review-v2 -->"
 
-SYSTEM_PROMPT = """\
-Senior engineer. Review diff for all changed files — Swift, CI workflows, \
-build config, scripts, tests, docs, and any other codebase changes.
-
-Flag: correctness bugs, logic errors, memory/retain issues, silent failure paths, \
-DRY violations, dead/unused code, long-term maintainability risks, readability problems, \
-CI misconfigurations, missing test coverage for behavioral changes.
-Skip: style, formatting, brace placement — linters own that.
-
-Quality rules — CRITICAL:
-- Only flag issues you are CERTAIN about. When in doubt, do not comment.
-- NEVER suggest code that is identical to what already exists. Before writing \
-a suggestion, re-read the diff line and verify your replacement actually changes something.
-- Before flagging "dead code", "missing error handling", or "unnecessary fallback", \
-consider whether it is intentional defensive programming.
-- Understand language semantics before flagging ordering issues. Python `and` \
-short-circuits left-to-right; `os.path.exists()` before `os.path.getsize()` is correct.
-- Fewer high-confidence comments are better than many speculative ones.
-- Do NOT invent problems. If the code is correct, return LGTM.
-
-Return a JSON object with three fields:
-- "summary": one-sentence overall assessment
-- "comments": array of objects for NEW inline comments, each with:
-  - "path": file path exactly as shown in diff header (after "b/")
-  - "line": line number in NEW file (right side of diff, from + in @@ headers)
-  - "body": one-line description: severity, problem, fix
-  - "suggestion": (optional) exact replacement code for that line — only when you \
-have a concrete fix that DIFFERS from the existing code
-- "thread_replies": array of objects responding to replies on your previous comments, each with:
-  - "thread_id": the thread_id from the previous review context
-  - "body": your response — acknowledge if resolved, counter-argue if not, or concede if \
-the author's argument is valid. Keep it brief.
-
-Line number rules (for "comments" only):
-- Use line numbers from the new file (number after + in @@ hunk headers)
-- Only comment on lines present in the diff as additions (+) or context lines
-- Never comment on deleted lines (-)
-
-If no issues found, return {"summary": "LGTM", "comments": [], "thread_replies": []}.
-
-Return ONLY valid JSON. No markdown fences. No text outside the JSON."""
-
 FOLLOWUP_ADDENDUM = """\
 
 This is a FOLLOW-UP review of incremental changes only. You are reviewing \
@@ -77,6 +35,18 @@ def load_claude_md() -> str:
         with open(CLAUDE_MD) as f:
             return f.read()
     return ""
+
+
+def extract_review_section(claude_md: str) -> str:
+    """Extract ## AI Code Review section from CLAUDE.md."""
+    match = re.search(
+        r"^## AI Code Review\n(.*?)(?=^## |\Z)",
+        claude_md,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        raise SystemExit("ERROR: '## AI Code Review' section not found in CLAUDE.md")
+    return match.group(0).strip()
 
 
 def call_openrouter(api_key: str, repo: str, user_content: str, system: str) -> str:
@@ -331,6 +301,8 @@ def create_review(repo: str, pr_number: str, summary: str,
 def main() -> None:
     api_key = os.environ["OPENROUTER_API_KEY"]
     pr_number = os.environ["PR_NUMBER"]
+    pr_title = os.environ.get("PR_TITLE", "")
+    pr_body = os.environ.get("PR_BODY", "")
     repo = os.environ["REPO"]
     event_action = os.environ.get("EVENT_ACTION", "opened")
 
@@ -352,17 +324,19 @@ def main() -> None:
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[:MAX_DIFF_CHARS] + "\n\n[diff truncated]"
 
-    # Build system prompt
+    # Build system prompt from CLAUDE.md review section
     claude_md = load_claude_md()
-    system = SYSTEM_PROMPT
+    review_section = extract_review_section(claude_md)
+    system = review_section
     if is_followup:
         system += FOLLOWUP_ADDENDUM
-    if claude_md:
-        system += f"\n\nProject conventions (from CLAUDE.md):\n\n{claude_md}"
+    conventions = claude_md.replace(review_section, "").strip()
+    if conventions:
+        system += f"\n\nProject conventions (from CLAUDE.md):\n\n{conventions}"
 
     # Build user prompt
     label = "incremental " if is_followup else ""
-    user_content = f"Review this {label}diff:\n\n```diff\n{diff}\n```"
+    user_content = f"PR title: {pr_title}\nPR description: {pr_body or '(empty)'}\n\nReview this {label}diff:\n\n```diff\n{diff}\n```"
 
     # Add previous review context for follow-ups
     previous = []
