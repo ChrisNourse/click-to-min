@@ -85,13 +85,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let xVal = Double(parts[0]),
               let yVal = Double(parts[1]) else { return }
         let point = CGPoint(x: xVal, y: yVal)
+        let resultPath = "/tmp/clicktomin-test-result.txt"
+        try? "pending".write(toFile: resultPath, atomically: true, encoding: .utf8)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let watcher = self?.dockWatcher else {
+                try? "error:no-dockwatcher-ax-trusted=\(AXIsProcessTrusted())".write(
+                    toFile: resultPath, atomically: true, encoding: .utf8)
                 os_log("--test-click: no DockWatcher (permission missing?)",
                        log: Log.lifecycle, type: .error)
                 return
             }
             watcher.injectTestClick(at: point)
+            try? "dispatched".write(toFile: resultPath, atomically: true, encoding: .utf8)
             os_log("--test-click: dispatched at (%{public}.1f, %{public}.1f)",
                    log: Log.lifecycle, type: .info, point.x, point.y)
         }

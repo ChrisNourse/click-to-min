@@ -80,6 +80,10 @@ jobs:
           CTMID=$!
           echo "Launched ClickToMin (PID $CTMID) with --test-click $CX,$CY"
           # Wait for minimize (1s app delay + processing)
+          sleep 2
+          echo "=== test-click result file ==="
+          cat /tmp/clicktomin-test-result.txt 2>/dev/null || echo "no result file"
+          echo ""
           if "$AXPROBE" wait-until-minimized com.apple.TextEdit --timeout 5; then
             echo "SUCCESS: Window minimized via --test-click!"
           else
