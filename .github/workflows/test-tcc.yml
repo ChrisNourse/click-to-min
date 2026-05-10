@@ -61,8 +61,8 @@ jobs:
 
       - name: Quick minimize test (bypass full suite)
         run: |
-          AXPROBE="$(swift build -c release --package-path qa/harness/AXProbe --show-bin-path)/axprobe"
-          # Ensure Safari is running with a window
+          AXPROBE="$(find qa/harness/AXProbe/.build -name axprobe -type f | head -1)"
+          echo "Using: $AXPROBE"
           open -a Safari
           sleep 2
           osascript -e 'tell application "Safari" to make new document' 2>/dev/null || true
